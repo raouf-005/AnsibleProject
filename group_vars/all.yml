@@ -1,0 +1,64 @@
+# Variables globales
+nfs_version: 3
+domain: projet.local
+net_management: "192.168.198.0/24"
+
+# Cumulus / NCLU
+# Description utilisee pour tracer les commits executes par Ansible
+nclu_commit_description_prefix: "Ansible"
+nclu_cleanup_commit_description: "full reset baseline before any playbook"
+nclu_use_rollback_cleanup: true
+nclu_cleanup_rollback_steps: 3
+
+# VLANs
+vlan_machine1: 10
+vlan_machine2: 20
+
+# Réseaux
+net_vlan10: "192.168.10.0/24"
+net_vlan20: "192.168.20.0/24"
+
+# IPs
+ip_machine1: "192.168.10.2"
+ip_machine2: "192.168.20.2"
+ip_serveur_vlan10: "192.168.10.10"
+ip_serveur_vlan20: "192.168.20.10"
+
+# IP NFS à utiliser par client selon la phase VLAN/bonding
+nfs_server_ip_map:
+  machine1: "192.168.10.10"
+  machine2: "192.168.20.10"
+
+# Points de montage NFS par client
+nfs_client_mounts:
+  machine1: "/machine1"
+  machine2: "/machine2"
+
+# Interface de labo utilisée pour la partie 1
+lab_client_interface: "ens34"
+
+# Bonding LACP
+bond_name: "bond0"
+bond_iface1: "ens34"
+bond_iface2: "ens35"
+
+# Ports physiques de la topologie en arbre
+# VMware LAN Segment 1: switch1 {{ sw1_uplink_port }} <-> switch3 {{ sw3_switch1_port }}
+# VMware LAN Segment 2: switch2 {{ sw2_uplink_port }} <-> switch3 {{ sw3_switch2_port }}
+# VMware LAN Segment 3: serveur {{ bond_iface1 }} <-> switch1 swp2
+# VMware LAN Segment 4: serveur {{ bond_iface2 }} <-> switch1 swp3
+# VMware LAN Segment 5: machine1 {{ lab_client_interface }} <-> switch1 {{ sw1_machine1_port }}
+# VMware LAN Segment 6: machine2 {{ lab_client_interface }} <-> switch2 {{ sw2_machine2_port }}
+sw1_uplink_port: "swp1"
+sw1_server_bond_ports: "swp2-3"
+sw1_machine1_port: "swp4"
+
+sw2_uplink_port: "swp1"
+sw2_machine2_port: "swp2"
+
+sw3_switch1_port: "swp1"
+sw3_switch2_port: "swp2"
+
+# Passerelles VLAN (VIP VRR / switch3)
+gw_vlan10: "192.168.10.1"
+gw_vlan20: "192.168.20.1"
