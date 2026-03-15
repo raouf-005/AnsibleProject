@@ -1,0 +1,50 @@
+# ============================================================
+# Role bonding-server : Agrégation de liens (LACP) pour le serveur NFS
+# ============================================================
+# Le serveur NFS a 2 interfaces réseau connectées à switch1
+# On crée un bond (bond0) en mode 802.3ad (LACP) et on transporte les VLAN 10 et 20 sur ce bond
+---
+- name: Charger le module bonding
+  modprobe:
+    name: bonding
+    state: present
+
+- name: Rendre le module bonding persistant
+  lineinfile:
+    path: /etc/modules
+    line: bonding
+    create: yes
+
+- name: Configurer le bond0 sur le serveur NFS
+  copy:
+    dest: /etc/network/interfaces.d/bond0
+    content: |
+      # Bond LACP pour tolérance de panne du serveur NFS
+      auto {{ bond_name }}
+      iface {{ bond_name }} inet manual
+          bond-slaves {{ bond_iface1 }} {{ bond_iface2 }}
+          bond-mode 802.3ad
+          bond-miimon 100
+          bond-xmit-hash-policy layer3+4
+          bond-min-links 1
+
+      auto {{ bond_name }}.10
+      iface {{ bond_name }}.10 inet static
+          address {{ ip_serveur_vlan10 }}
+          netmask 255.255.255.0
+          vlan-raw-device {{ bond_name }}
+
+      auto {{ bond_name }}.20
+      iface {{ bond_name }}.20 inet static
+          address {{ ip_serveur_vlan20 }}
+          netmask 255.255.255.0
+          vlan-raw-device {{ bond_name }}
+
+      auto {{ bond_iface1 }}
+      iface {{ bond_iface1 }} inet manual
+          bond-master {{ bond_name }}
+
+      auto {{ bond_iface2 }}
+      iface {{ bond_iface2 }} inet manual
+          bond-master {{ bond_name }}
+  notify: restart networking

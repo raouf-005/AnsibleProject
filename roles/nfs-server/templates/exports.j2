@@ -1,0 +1,3 @@
+# Exports NFS - Partages pour machine1 et machine2
+/machine1  {{ net_vlan10 }}(rw,sync,no_subtree_check,no_root_squash) {{ net_management }}(rw,sync,no_subtree_check,no_root_squash)
+/machine2  {{ net_vlan20 }}(rw,sync,no_subtree_check,no_root_squash) {{ net_management }}(rw,sync,no_subtree_check,no_root_squash)

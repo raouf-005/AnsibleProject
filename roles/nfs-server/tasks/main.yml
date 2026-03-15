@@ -1,0 +1,41 @@
+# ============================================================
+# Role nfs-server : Installation et configuration du serveur NFS
+# ============================================================
+# Installe le serveur NFS sur le serveur de fichiers
+# Crée les répertoires de partage /machine1 et /machine2
+# Configure les exports
+---
+- name: Installer le serveur NFS
+  apt:
+    name:
+      - nfs-kernel-server
+      - nfs-common
+    state: present
+  ignore_errors: true
+
+- name: Créer les répertoires de partage NFS
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0777"
+    owner: nobody
+    group: nogroup
+  loop: "{{ nfs_client_mounts.values() | list }}"
+
+- name: Configurer les exports NFS
+  template:
+    src: exports.j2
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart nfs
+
+- name: Démarrer et activer le service NFS
+  systemd:
+    name: nfs-kernel-server
+    state: started
+    enabled: yes
+
+- name: Exporter les partages NFS
+  command: exportfs -ra

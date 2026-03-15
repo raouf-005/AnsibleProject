@@ -1,0 +1,55 @@
+# ============================================================
+# Role nfs-client : Installation et montage NFS sur les clients
+# ============================================================
+# Installe le client NFS et monte le partage correspondant à la machine
+---
+- name: Installer le client NFS
+  apt:
+    name: nfs-common
+    state: present
+  ignore_errors: true
+
+- name: Créer le point de montage local
+  file:
+    path: "{{ nfs_client_mounts[inventory_hostname] }}"
+    state: directory
+    mode: "0755"
+  when: inventory_hostname in nfs_client_mounts
+
+- name: Tester la connectivité vers le serveur NFS
+  command: ping -c 2 -W 3 {{ nfs_mount_server }}
+  register: nfs_ping
+  ignore_errors: true
+
+- name: Afficher le résultat du test de connectivité
+  debug:
+    msg: "{{ 'Serveur NFS joignable' if nfs_ping.rc == 0 else 'ATTENTION : serveur NFS injoignable - vérifier réseau/VLANs/bonding' }}"
+
+- name: Monter le partage NFS pour machine1
+  mount:
+    path: "{{ nfs_client_mounts[inventory_hostname] }}"
+    src: "{{ nfs_mount_server }}:{{ nfs_client_mounts[inventory_hostname] }}"
+    fstype: nfs
+    opts: "vers={{ nfs_version }},rw,sync,hard,_netdev,timeo=600,retrans=2"
+    state: mounted
+  when: inventory_hostname == "machine1" and nfs_ping.rc == 0
+
+- name: Monter le partage NFS pour machine2
+  mount:
+    path: "{{ nfs_client_mounts[inventory_hostname] }}"
+    src: "{{ nfs_mount_server }}:{{ nfs_client_mounts[inventory_hostname] }}"
+    fstype: nfs
+    opts: "vers={{ nfs_version }},rw,sync,hard,_netdev,timeo=600,retrans=2"
+    state: mounted
+  when: inventory_hostname == "machine2" and nfs_ping.rc == 0
+
+- name: Vérifier le montage NFS
+  command: df -hT {{ nfs_client_mounts[inventory_hostname] }}
+  register: nfs_mount_check
+  ignore_errors: true
+  when: inventory_hostname in nfs_client_mounts
+
+- name: Afficher le statut du montage
+  debug:
+    var: nfs_mount_check.stdout_lines
+  when: inventory_hostname in nfs_client_mounts

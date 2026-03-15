@@ -1,0 +1,95 @@
+- name: "[Partie 1] Installer les paquets"
+  hosts: serveur-nfs:clients
+  become: yes
+  tasks:
+    - name: Installer ifenslave, vlan et paquets NFS sur le serveur
+      apt:
+        name:
+          - ifenslave
+          - vlan
+          - nfs-kernel-server
+          - nfs-common
+        state: present
+      when: inventory_hostname == "serveur-nfs"
+
+    - name: Installer le client NFS sur les machines
+      apt:
+        name:
+          - nfs-common
+        state: present
+      when: inventory_hostname in groups['clients']
+
+- name: "[Partie 1] Configurer les VLANs sur les switches"
+  hosts: switches
+  become: yes
+  roles:
+    - vlans
+
+#for bonding part
+- name: "[Partie 1] Bond LACP sur le serveur NFS"
+  hosts: serveur-nfs
+  become: yes
+  roles:
+    - bonding-server
+  handlers:
+    - name: restart networking
+      systemd:
+        name: networking
+        state: restarted
+
+- name: "[Partie 1] Configurer les exports NFS"
+  hosts: serveur-nfs
+  become: yes
+  roles:
+    - nfs-server
+  handlers:
+    - name: restart nfs
+      systemd:
+        name: nfs-kernel-server
+        state: restarted
+
+- name: "[Partie 1] Configurer les interfaces clientes"
+  hosts: clients
+  become: yes
+  tasks:
+    - name: Configurer l'interface de machine1 dans /etc/network/interfaces
+      blockinfile:
+        path: /etc/network/interfaces
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - client-lan"
+        block: |
+          auto {{ lab_client_interface }}
+          iface {{ lab_client_interface }} inet static
+              address {{ ip_machine1 }}
+              netmask 255.255.255.0
+              gateway {{ gw_vlan10 }}
+      when: inventory_hostname == "machine1"
+      notify: restart networking
+
+    - name: Configurer l'interface de machine2 dans /etc/network/interfaces
+      blockinfile:
+        path: /etc/network/interfaces
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - client-lan"
+        block: |
+          auto {{ lab_client_interface }}
+          iface {{ lab_client_interface }} inet static
+              address {{ ip_machine2 }}
+              netmask 255.255.255.0
+              gateway {{ gw_vlan20 }}
+      when: inventory_hostname == "machine2"
+      notify: restart networking
+
+    - name: Redémarrer le réseau si la config change
+      meta: flush_handlers
+  handlers:
+    - name: restart networking
+      systemd:
+        name: networking
+        state: restarted
+
+- name: "[Partie 1] Monter NFS via les IPs VLAN"
+  hosts: clients
+  become: yes
+  vars:
+    nfs_mount_server: "{{ nfs_server_ip_map[inventory_hostname] }}"
+  roles:
+    - nfs-client
