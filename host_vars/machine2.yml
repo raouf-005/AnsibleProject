@@ -1,0 +1,13 @@
+# host_vars/machine2.yml
+ansible_host: 192.168.198.32
+
+bond_name: bond0
+bond_slaves:
+  - ens34 # cable to switch1
+  - ens35 # cable to switch2
+bond_ip: 192.168.2.10
+bond_netmask: 255.255.255.0
+bond_gateway: 192.168.2.1
+bond_mode: 802.3ad
+bond_miimon: 100
+bond_lacp_rate: fast

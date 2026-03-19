@@ -1,0 +1,281 @@
+# ============================================================
+# PLAYBOOK PARTIE 2 : Redondance de liens - STP
+# ============================================================
+# Tests automatisés :
+#   1. Boucle L2 sans STP (ping async + CPU)
+#   2. Activation STP + mesure convergence
+#   3. Reconvergence après coupure de lien
+#   4. Vérification rôles STP (root/designated/blocked)
+#   5. Rapport de résultats dans le terminal
+#
+# Usage :
+#   ansible-playbook -i inventories/hosts.ini 02-stp-redondance.yml
+# ============================================================
+---
+# ============================================================
+# ÉTAPE 0 : Configuration IP des machines
+# ============================================================
+- name: "[Partie 2 - STP] Configuration IP des machines"
+  hosts: clients
+  become: yes
+  tasks:
+    - name: Configurer l'interface eth0 avec une IP statique
+      copy:
+        dest: /etc/network/interfaces.d/eth0
+        content: |
+          auto {{ lab_client_interface }}
+          iface {{ lab_client_interface }} inet static
+              address {{ stp_client_ips[inventory_hostname] }}
+              netmask 255.255.255.0
+
+    - name: Appliquer la configuration réseau
+      systemd:
+        name: networking
+        state: restarted
+      failed_when: false
+      changed_when: false
+
+# ============================================================
+# ÉTAPE 1 : Configurer le bridge SANS STP
+# ============================================================
+- name: "[Partie 2 - STP] Configuration bridge sans STP"
+  hosts: switches
+  become: yes
+  tasks:
+    - name: Vider les changements NCLU en attente
+      command: net abort
+      failed_when: false
+      changed_when: false
+
+    - name: Configurer le bridge (ports)
+      command: "{{ item }}"
+      loop:
+        - "net add bridge bridge ports {{ bridge_ports }}"
+        - "net add bridge bridge pvid 1"
+      failed_when: false
+      changed_when: false
+
+    - name: Désactiver STP via NCLU (Cumulus)
+      command: net add bridge stp off
+      failed_when: false
+      changed_when: false
+
+    - name: Commit de la configuration bridge sans STP
+      command: net commit
+      failed_when: false
+      changed_when: false
+
+    - name: Vérifier que STP est bien désactivé
+      command: cat /sys/class/net/bridge/bridge/stp_state
+      register: stp_state_check
+      changed_when: false
+
+    - name: Confirmer la désactivation STP
+      debug:
+        msg: "STP state = {{ stp_state_check.stdout }} (0 = désactivé, attendu)"
+
+# ============================================================
+# ÉTAPE 2 : TEST - Boucle L2 sans STP
+# ============================================================
+- name: "[Partie 2 - STP] TEST 1 — Boucle L2 sans STP"
+  hosts: machine1
+  become: yes
+  tasks:
+    - name: Supprimer les résultats de test précédents
+      file:
+        path: /tmp/test_sans_stp.txt
+        state: absent
+
+    - name: "Lancer le ping vers machine2 en arrière-plan (async)"
+      shell: |
+        ping -c 100 -i 0.1 {{ stp_client_ips['machine2'] }} > /tmp/test_sans_stp.txt 2>&1
+      async: 30
+      poll: 0
+      register: ping_sans_stp_job
+
+    - name: Attendre 10s pour observer la boucle
+      pause:
+        seconds: 10
+
+    - name: Récupérer l'utilisation CPU sur machine1
+      shell: top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}'
+      register: cpu_machine1
+      changed_when: false
+
+- name: "[Partie 2 - STP] TEST 1 — Observation CPU switches (sans STP)"
+  hosts: switches
+  become: yes
+  tasks:
+    - name: Récupérer l'utilisation CPU sur les switches
+      shell: top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}'
+      register: cpu_switch
+      changed_when: false
+
+    - name: Récupérer le nombre de paquets sur le bridge (indicateur boucle)
+      shell: |
+        cat /proc/net/dev | grep bridge | awk '{print "RX packets=" $3, "TX packets=" $11}'
+      register: bridge_packets
+      changed_when: false
+      failed_when: false
+
+    - name: "Stocker les métriques sans STP"
+      set_fact:
+        metrics_sans_stp:
+          cpu: "{{ cpu_switch.stdout }}"
+          packets: "{{ bridge_packets.stdout }}"
+
+- name: "[Partie 2 - STP] TEST 1 — Récupérer résultat ping sans STP"
+  hosts: machine1
+  become: yes
+  tasks:
+    - name: Attendre la fin du ping (job async)
+      async_status:
+        jid: "{{ ping_sans_stp_job.ansible_job_id }}"
+      register: ping_result
+      until: ping_result.finished
+      retries: 15
+      delay: 3
+      failed_when: false
+
+    - name: Extraire les stats ping (paquets perdus)
+      shell: tail -3 /tmp/test_sans_stp.txt
+      register: ping_sans_stp_stats
+      changed_when: false
+      failed_when: false
+
+    - name: "Stocker résultats TEST 1"
+      set_fact:
+        test1_ping_stats: "{{ ping_sans_stp_stats.stdout }}"
+        test1_cpu: "{{ cpu_machine1.stdout }}"
+
+# ============================================================
+# ÉTAPE 3 : Activation STP + mesure de convergence
+# ============================================================
+- name: "[Partie 2 - STP] Activation du STP classique (802.1D)"
+  hosts: switches
+  become: yes
+  tasks:
+    - name: Vider les changements NCLU en attente
+      command: net abort
+      failed_when: false
+      changed_when: false
+
+    - name: Réactiver STP via NCLU (Cumulus)
+      command: net del bridge stp off
+      failed_when: false
+      changed_when: false
+
+    - name: Commit de la réactivation STP
+      command: net commit
+      failed_when: false
+      changed_when: false
+
+    - name: Vérifier que STP est bien activé
+      command: cat /sys/class/net/bridge/bridge/stp_state
+      register: stp_state_on
+      changed_when: false
+
+    - name: Confirmer l'activation STP
+      debug:
+        msg: "STP state = {{ stp_state_on.stdout }} (1 = activé, attendu)"
+
+- name: "[Partie 2 - STP] TEST 2 — Mesure du temps de convergence STP"
+  hosts: machine1
+  become: yes
+  tasks:
+    - name: Supprimer les résultats de test précédents
+      file:
+        path: /tmp/test_convergence_stp.txt
+        state: absent
+
+    - name: Enregistrer l'heure de début de convergence
+      shell: date +%s%3N
+      register: convergence_start
+      changed_when: false
+
+    - name: "Lancer le ping en arrière-plan pour mesurer la convergence"
+      shell: |
+        ping -c 200 -i 0.1 {{ stp_client_ips['machine2'] }} > /tmp/test_convergence_stp.txt 2>&1
+      async: 60
+      poll: 0
+      register: ping_convergence_job
+
+    - name: Attendre 5s (laisser STP converger)
+      pause:
+        seconds: 5
+
+    - name: Attendre la fin du ping de convergence
+      async_status:
+        jid: "{{ ping_convergence_job.ansible_job_id }}"
+      register: conv_result
+      until: conv_result.finished
+      retries: 20
+      delay: 3
+      failed_when: false
+
+    - name: Enregistrer l'heure de fin
+      shell: date +%s%3N
+      register: convergence_end
+      changed_when: false
+
+    - name: Calculer le temps de convergence
+      set_fact:
+        convergence_time_ms: "{{ convergence_end.stdout | int - convergence_start.stdout | int }}"
+
+    - name: Extraire les stats ping convergence
+      shell: tail -3 /tmp/test_convergence_stp.txt
+      register: ping_convergence_stats
+      changed_when: false
+      failed_when: false
+
+    - name: "Stocker résultats TEST 2"
+      set_fact:
+        test2_ping_stats: "{{ ping_convergence_stats.stdout }}"
+        test2_convergence_ms: "{{ convergence_time_ms }}"
+
+# ============================================================
+# ÉTAPE 4 : Vérification des rôles STP
+# ============================================================
+- name: "[Partie 2 - STP] TEST 3 — Vérification des rôles STP"
+  hosts: switches
+  become: yes
+  tasks:
+    - name: Afficher la table STP complète
+      command: brctl showstp bridge
+      register: stp_table
+      changed_when: false
+
+    - name: Récupérer les infos du bridge (mstpctl)
+      command: mstpctl showbridge bridge
+      register: bridge_info
+      changed_when: false
+      failed_when: false
+
+    - name: Récupérer les infos de chaque port STP
+      command: mstpctl showport bridge
+      register: port_info
+      changed_when: false
+      failed_when: false
+
+    - name: Identifier le Root Bridge
+      shell: |
+        mstpctl showbridge bridge | grep -i "designated root\|root port\|root bridge" || \
+        brctl showstp bridge | grep -i "root"
+      register: root_info
+      changed_when: false
+      failed_when: false
+
+    - name: Identifier les ports bloqués
+      shell: |
+        brctl showstp bridge | grep -E "state\s+blocking|state\s+BLK" || \
+        mstpctl showport bridge | grep -i "discarding\|blocking"
+      register: blocked_ports
+      changed_when: false
+      failed_when: false
+
+    - name: "Stocker résultats TEST 3"
+      set_fact:
+        test3_stp_table: "{{ stp_table.stdout_lines }}"
+        test3_root_info: "{{ root_info.stdout }}"
+        test3_blocked_ports: "{{ blocked_ports.stdout }}"
+        test3_port_details: "{{ port_info.stdout_lines | default([]) }}"

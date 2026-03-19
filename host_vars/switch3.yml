@@ -1,0 +1,8 @@
+# host_vars/switch3.yml
+ansible_host: 192.168.198.13
+
+sw3_switch1_port: swp2
+sw3_switch2_port: swp3
+sw3_ip_toward_sw1: 192.168.1.1 # gateway for machine1 subnet
+sw3_ip_toward_sw2: 192.168.2.1 # gateway for machine2 subnet
+bridge_ports: "swp2,swp3"

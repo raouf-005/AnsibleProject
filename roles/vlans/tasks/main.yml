@@ -1,64 +1,58 @@
+# ============================================================
+# Role vlans : Configuration des VLANs sur les commutateurs Cumulus
+# ============================================================
+# Ce rôle configure les VLANs sur les switches Cumulus Linux
+# - VLAN 10 : machine1
+# - VLAN 20 : machine2
+# - Le serveur NFS est présenté dans les VLANs 10 et 20
+#
+# Topologie physique :
+#   switch3 = coeur, relié à switch1 et switch2
+#   switch1 = accès gauche, machine1 en access + serveur NFS en bond LACP trunk
+#   switch2 = accès droit, machine2 en access
+---
+# Evite qu'un ancien "net pending" invalide casse le commit courant.
+- name: "[Switches] Purger les commandes NCLU en attente"
+  command: net abort
+  ignore_errors: true
+
 # ===== SWITCH 1 =====
-- name: "[Switch1] Configure LACP bond for NFS server"
-  command: "{{ item }}"
-  loop:
-    - net add bond {{ bond_name }} bond slaves {{ sw1_server_bond_ports }}
-    - net add bond {{ bond_name }} bond mode 802.3ad
-    - net add bond {{ bond_name }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add bridge bridge ports {{ bond_name }}
-    - net commit
-  delegate_to: switch1
-  ignore_errors: true
-
-- name: "[Switch1] Configure uplink trunk to Switch3"
-  command: "{{ item }}"
-  loop:
-    - net add interface {{ sw1_uplink_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add bridge bridge ports {{ sw1_uplink_port }}
-    - net commit
-  delegate_to: switch1
-  ignore_errors: true
-
-- name: "[Switch1] Configure access port for Machine1"
+- name: "[Switch1] Port access VLAN 10 → machine1"
   command: "{{ item }}"
   loop:
     - net add interface {{ sw1_machine1_port }} bridge access {{ vlan_machine1 }}
-    - net add bridge bridge ports {{ sw1_machine1_port }}
+    - net add interface {{ sw1_uplink_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge ports {{ sw1_uplink_port }},{{ sw1_machine1_port }}
     - net add bridge bridge vids {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge pvid 1
     - net commit
-  delegate_to: switch1
+  when: inventory_hostname == "switch1"
   ignore_errors: true
 
 # ===== SWITCH 2 =====
-- name: "[Switch2] Configure access port for Machine2"
+- name: "[Switch2] Port access VLAN 20 → machine2"
   command: "{{ item }}"
   loop:
     - net add interface {{ sw2_machine2_port }} bridge access {{ vlan_machine2 }}
-    - net add bridge bridge ports {{ sw2_machine2_port }}
-    - net commit
-  delegate_to: switch2
-  ignore_errors: true
-
-- name: "[Switch2] Configure uplink trunk to Switch3"
-  command: "{{ item }}"
-  loop:
-    - net add interface {{ sw2_uplink_port }} bridge trunk vlans {{ vlan_machine2 }}
-    - net add bridge bridge ports {{ sw2_uplink_port }}
+    - net add interface {{ sw2_uplink_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge ports {{ sw2_uplink_port }},{{ sw2_machine2_port }}
     - net add bridge bridge vids {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge pvid 1
     - net commit
-  delegate_to: switch2
+  when: inventory_hostname == "switch2"
   ignore_errors: true
 
 # ===== SWITCH 3 =====
-- name: "[Switch3] Configure trunks toward Switch1 and Switch2"
+- name: "[Switch3] Trunks vers switch1 et switch2"
   command: "{{ item }}"
   loop:
     - net add interface {{ sw3_switch1_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add interface {{ sw3_switch2_port }} bridge trunk vlans {{ vlan_machine2 }},{{ vlan_machine1 }}
+    - net add interface {{ sw3_switch2_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
     - net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}
     - net add bridge bridge vids {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge pvid 1
     - net commit
-  delegate_to: switch3
+  when: inventory_hostname == "switch3"
   ignore_errors: true
 # ============================================================
 # Or i can do the bridge only for vlan_machine2 = 20 and remove the trunk vlan_machine1 = 10 since it is not used on switch2 and switch3,
@@ -68,3 +62,4 @@
 #   - net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}
 #   - net add bridge bridge vids {{ vlan_machine2 }}
 #   - net commit
+# avec le trajet   nfs (vlan20,vlan10) <->  switch1 (vlan20) <-> switch3 (vlan20) <-> switch2 (vlan20) cela fonctionne aussi pour le vlan20, mais le vlan10 ne serait pas transporté vers switch2 et machine2, ce qui n'est pas idéal pour la cohérence de la configuration et la possibilité d'ajouter d'autres machines dans le futur sur vlan10 via switch2

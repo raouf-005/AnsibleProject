@@ -4,6 +4,14 @@
 # Le serveur NFS a 2 interfaces réseau connectées à switch1
 # On crée un bond (bond0) en mode 802.3ad (LACP) et on transporte les VLAN 10 et 20 sur ce bond
 ---
+- name: Installer ifenslave pour le bonding
+  apt:
+    name:
+      - ifenslave
+      - vlan
+    state: present
+  ignore_errors: true
+
 - name: Charger le module bonding
   modprobe:
     name: bonding
@@ -14,6 +22,11 @@
     path: /etc/modules
     line: bonding
     create: yes
+
+- name: Supprimer la configuration serveur pre-bonding
+  file:
+    path: /etc/network/interfaces.d/nfs-vlans
+    state: absent
 
 - name: Configurer le bond0 sur le serveur NFS
   copy:
@@ -48,3 +61,13 @@
       iface {{ bond_iface2 }} inet manual
           bond-master {{ bond_name }}
   notify: restart networking
+
+- name: "[Switch1] Configurer LACP côté switch pour le serveur"
+  command: "{{ item }}"
+  loop:
+    - net add bond bond-serveur bond slaves {{ sw1_nfs_ports }}
+    - net add bond bond-serveur bond mode 802.3ad
+    - net add bond bond-serveur bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge ports bond-serveur
+    - net commit
+  delegate_to: switch1
