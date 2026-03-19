@@ -115,7 +115,6 @@
           iface {{ lab_client_interface }} inet static
               address {{ ip_machine1  }}
               netmask 255.255.255.0
-              gateway {{ gw_vlan10}}
     - name: Appliquer la configuration réseau
       systemd:
         name: networking
@@ -133,9 +132,9 @@
         content: |
           auto {{ lab_client_interface }}
           iface {{ lab_client_interface }} inet static
-              address {{ip_machine2}}
+              address {{ ip_machine2 }}
               netmask 255.255.255.0
-              gateway {{ gw_vlan20 }}
+
     - name: Appliquer la configuration réseau
       systemd:
         name: networking

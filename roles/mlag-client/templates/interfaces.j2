@@ -1,6 +1,4 @@
-# Ce fichier est géré par Ansible
-auto lo
-iface lo inet loopback
+
 
 # Configuration des interfaces physiques (elles sont gérées par le bond)
 auto {{ bond_iface1 }}
@@ -15,11 +13,11 @@ iface {{ bond_iface2 }} inet manual
 auto {{ bond_name }}
 iface {{ bond_name }} inet static
 {% if inventory_hostname == 'machine1' %}
-    address {{ ip_machine1 }}
-    gateway {{ gw_vlan10 }}
+    address {{ hostvars["machine1"]['bond_ip'] }}
+    gateway {{ hostvars["machine1"]['bond_gateway'] }}
 {% elif inventory_hostname == 'machine2' %}
-    address {{ ip_machine2 }}
-    gateway {{ gw_vlan20 }}
+    address {{ hostvars["machine2"]['bond_ip'] }}
+    gateway {{ hostvars["machine2"]['bond_gateway'] }}
 {% endif %}
     bond-slaves {{ bond_iface1 }} {{ bond_iface2 }}
     bond-mode 802.3ad

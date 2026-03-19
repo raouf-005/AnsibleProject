@@ -25,37 +25,6 @@
       service:
         name: frr
         state: restarted
-
-- name: Delete NFS exports and client configs
-  hosts: all
-  become: yes
-
-  tasks:
-    - name: Remove NFS exports file
-      file:
-        path: /etc/exports
-        state: absent
-- name: Find all files in interfaces.d
-  hosts: clients,server
-  become: yes
-  tasks:
-    - name: Find all files in /etc/network/interfaces.d
-      command: "rm -r /etc/network/interfaces.d/*"
-      ignore_errors: yes
-
-- name: Restart networking to apply clean state
-  hosts: all
-  become: yes
-  tasks:
-    - name: Restart networking service
-      systemd:
-        name: networking
-        state: restarted
-- name: Uncomment ifupdownblacklist in netd.conf
-  hosts: switches
-  become: yes
-
-  tasks:
     - name: Uncomment ifupdownblacklist line in netd.conf
       replace:
         path: /etc/netd.conf
@@ -66,3 +35,58 @@
       systemd:
         name: netd
         state: restarted
+
+- name: Delete NFS exports and client configs
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Remove NFS exports file
+      file:
+        path: /etc/exports
+        state: absent
+
+- name: Find all files in interfaces.d
+  hosts: clients,server
+  become: yes
+  tasks:
+    - name: Find all files in /etc/network/interfaces.d
+      find:
+        paths: /etc/network/interfaces.d
+        file_type: file
+      register: iface_files
+
+    - name: Remove all files in /etc/network/interfaces.d
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ iface_files.files }}"
+
+- name: Restart networking to apply clean state
+  hosts: machines, servers
+  become: yes
+  tasks:
+    - name: Restart networking service
+      systemd:
+        name: networking
+        state: restarted
+
+- name: Disable NFS mounts
+  hosts: clients
+  become: yes
+  tasks:
+    - name: Comment out NFS entries in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\snfs\s.*)'
+        replace: '# \1'
+
+    - name: Unmount all NFS mounts
+      command: umount -f -l -t nfs -a
+      ignore_errors: yes
+
+    - name: Disable rpcbind
+      systemd:
+        name: rpcbind
+        state: stopped
+        enabled: no
