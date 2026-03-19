@@ -1,0 +1,30 @@
+# ============================================================
+# PLAYBOOK PARTIE 2 : Redondance de liens - RSTP
+# ============================================================
+# Ce playbook :
+# 1. Passe de STP classique à RSTP (802.1w)
+# 2. Vérifie les rôles et états des ports
+# 3. Permet la comparaison de convergence STP vs RSTP
+#
+# Usage :
+#   ansible-playbook -i inventories/hosts.ini 02-rstp-redondance.yml
+# ============================================================
+---
+# --- Étape 1 : Activer RSTP ---
+- name: "[Partie 2 - RSTP] Activation de RSTP (802.1w)"
+  hosts: switches
+  become: yes
+  roles:
+    - rstp
+# --- Étape 2 : Vérification et tests ---
+- name: "[Partie 2 - RSTP] Vérification et comparaison"
+  hosts: switches
+  become: yes
+  tasks:
+    - name: Afficher la table RSTP complète
+      command: brctl showstp bridge
+      register: rstp_table
+
+    - name: Résultat RSTP
+      debug:
+        var: rstp_table.stdout_lines

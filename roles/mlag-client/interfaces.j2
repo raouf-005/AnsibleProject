@@ -1,0 +1,27 @@
+# Ce fichier est géré par Ansible
+auto lo
+iface lo inet loopback
+
+# Configuration des interfaces physiques (elles sont gérées par le bond)
+auto {{ bond_iface1 }}
+iface {{ bond_iface1 }} inet manual
+    bond-master {{ bond_name }}
+
+auto {{ bond_iface2 }}
+iface {{ bond_iface2 }} inet manual
+    bond-master {{ bond_name }}
+
+# Configuration de l'agrégat LACP (Actif/Actif)
+auto {{ bond_name }}
+iface {{ bond_name }} inet static
+{% if inventory_hostname == 'machine1' %}
+    address {{ ip_machine1 }}
+    gateway {{ gw_vlan10 }}
+{% elif inventory_hostname == 'machine2' %}
+    address {{ ip_machine2 }}
+    gateway {{ gw_vlan20 }}
+{% endif %}
+    bond-slaves {{ bond_iface1 }} {{ bond_iface2 }}
+    bond-mode 802.3ad
+    bond-miimon 100
+    bond-xmit-hash-policy layer3+4

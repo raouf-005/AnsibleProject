@@ -1,0 +1,6 @@
+- name: "Create a permanent backup of the baseline configuration"
+  hosts: switches
+  become: yes
+  tasks:
+    - name: Create a permanent backup of the baseline configuration
+      command: config-backup -D "Baseline CLEAN" -p

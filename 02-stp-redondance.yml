@@ -35,6 +35,22 @@
       failed_when: false
       changed_when: false
 
+- name: Remove mstpctl-forcevers from netd.conf and configure bridge STP
+  hosts: switches
+  become: yes
+
+  tasks:
+    - name: Comment out mstpctl-forcevers from ifupdownblacklist in netd.conf
+      replace:
+        path: /etc/netd.conf
+        regexp: "^(ifupdownblacklist.*)"
+        replace: '# \1'
+
+    - name: Restart netd service
+      systemd:
+        name: netd
+        state: restarted
+
 # ============================================================
 # ÉTAPE 1 : Configurer le bridge SANS STP
 # ============================================================
@@ -169,6 +185,11 @@
       command: net commit
       failed_when: false
       changed_when: false
+
+    - name: RSTP to STP fallback check
+      command: "{{ item }}"
+      loop:
+        - "mstpctl setforcevers bridge stp"
 
     - name: Vérifier que STP est bien activé
       command: cat /sys/class/net/bridge/bridge/stp_state

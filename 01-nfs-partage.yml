@@ -1,3 +1,26 @@
+# ============================================================
+# PLAYBOOK PARTIE 1 : NFS avec VLAN et bonding directement
+# ============================================================
+# Configuration finale appliquée directement en une seule passe :
+#   1. Base commune sur tous les hôtes
+#   2. Installation des paquets
+#   3. VLANs sur les switches
+#   4. Isolation VLAN (pas de routage inter-VLAN sur switch3)
+#   5. Bond LACP sur le serveur NFS vers switch1 (bond0.10 + bond0.20)
+#   6. Exports NFS
+#   7. Interfaces clientes en lien simple
+#   8. Montage NFS via les IPs VLAN
+#
+# Exécution :
+#   ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i inventories/hosts.ini 01-nfs-partage.yml
+# ============================================================
+---
+#- name: "[Partie 1] Configuration de base"
+# hosts: all
+# become: yes
+# roles:
+#   - common
+
 - name: "[Partie 1] Installer les paquets"
   hosts: serveur-nfs:clients
   become: yes
@@ -25,9 +48,38 @@
   roles:
     - vlans
 
-#for bonding part
+- name: "[Partie 1] Desactiver le routage inter-VLAN sur switch3"
+  hosts: switch_l3
+  become: yes
+  tasks:
+    - name: Purger les commandes NCLU en attente
+      command: net abort
+      failed_when: false
+      changed_when: false
+
+    - name: Supprimer les passerelles VLAN si presentes
+      command: "{{ item }}"
+      loop:
+        - net del vlan {{ vlan_machine1 }} ip address {{ gw_vlan10 }}/24
+        - net del vlan {{ vlan_machine2 }} ip address {{ gw_vlan20 }}/24
+      failed_when: false
+      changed_when: false
+
+    - name: Commit NCLU de l'isolation VLAN
+      command: net commit
+      failed_when: false
+      changed_when: false
+
+    - name: Desactiver le routage IPv4
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: "0"
+        sysctl_set: yes
+        state: present
+        reload: yes
+
 - name: "[Partie 1] Bond LACP sur le serveur NFS"
-  hosts: serveur-nfs
+  hosts: servers
   become: yes
   roles:
     - bonding-server
@@ -38,7 +90,7 @@
         state: restarted
 
 - name: "[Partie 1] Configurer les exports NFS"
-  hosts: serveur-nfs
+  hosts: servers
   become: yes
   roles:
     - nfs-server
@@ -49,39 +101,42 @@
         state: restarted
 
 - name: "[Partie 1] Configurer les interfaces clientes"
-  hosts: clients
+  hosts: machine1
   become: yes
   tasks:
-    - name: Configurer l'interface de machine1 dans /etc/network/interfaces
-      blockinfile:
-        path: /etc/network/interfaces
-        marker: "# {mark} ANSIBLE MANAGED BLOCK - client-lan"
-        block: |
+    - name: Configurer l'interface client-lan
+      copy:
+        dest: /etc/network/interfaces.d/client-lan
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
           auto {{ lab_client_interface }}
           iface {{ lab_client_interface }} inet static
-              address {{ ip_machine1 }}
+              address {{ ip_machine1  }}
               netmask 255.255.255.0
-              gateway {{ gw_vlan10 }}
-      when: inventory_hostname == "machine1"
-      notify: restart networking
-
-    - name: Configurer l'interface de machine2 dans /etc/network/interfaces
-      blockinfile:
-        path: /etc/network/interfaces
-        marker: "# {mark} ANSIBLE MANAGED BLOCK - client-lan"
-        block: |
+              gateway {{ gw_vlan10}}
+    - name: Appliquer la configuration réseau
+      systemd:
+        name: networking
+        state: restarted
+- name: "[Partie 1] Configurer les interfaces machine 2"
+  hosts: machine2
+  become: yes
+  tasks:
+    - name: Configurer l'interface client-lan
+      copy:
+        dest: /etc/network/interfaces.d/client-lan
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
           auto {{ lab_client_interface }}
           iface {{ lab_client_interface }} inet static
-              address {{ ip_machine2 }}
+              address {{ip_machine2}}
               netmask 255.255.255.0
               gateway {{ gw_vlan20 }}
-      when: inventory_hostname == "machine2"
-      notify: restart networking
-
-    - name: Redémarrer le réseau si la config change
-      meta: flush_handlers
-  handlers:
-    - name: restart networking
+    - name: Appliquer la configuration réseau
       systemd:
         name: networking
         state: restarted

@@ -1,0 +1,29 @@
+# Role common : configuration de base pour toutes les machines
+---
+#- name: Mettre à jour le cache des paquets
+#  apt:
+#    update_cache: yes
+#    cache_valid_time: 3600
+#  when: ansible_os_family == "Debian"
+#  ignore_errors: yes
+
+#- name: Installer les outils réseau de base
+#  apt:
+#    name:
+#      - net-tools
+#     - tcpdump
+#      - traceroute
+#      - iputils-ping
+#      - vim
+#    state: present
+#  when: ansible_os_family == "Debian"
+#  ignore_errors: yes
+
+#- name: Activer le routage IP (si nécessaire)
+#  sysctl:
+#    name: net.ipv4.ip_forward
+#    value: "1"
+#    sysctl_set: yes
+#   state: present
+#    reload: yes
+# when: "'switch_l3' in group_names or 'servers' in group_names"

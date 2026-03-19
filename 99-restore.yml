@@ -1,0 +1,68 @@
+---
+- name: Restore baseline configuration on Cumulus switches
+  hosts: switches
+  become: yes
+
+  vars:
+    backup_files:
+      switch1: "config_backup-2026-03-18-20.08.12_cumulus-perm"
+      switch2: "config_backup-2026-03-18-20.18.36_cumulus-perm"
+      switch3: "config_backup-2026-03-18-20.08.12_cumulus-perm"
+
+  tasks:
+    - name: Restore the permanent backup for this switch
+      command: "config-restore -f -b {{ backup_files[inventory_hostname] }}"
+      register: restore_result
+
+    - name: Show restore result
+      debug:
+        msg: "{{ restore_result.stdout_lines | default([]) }}"
+
+    - name: Reload network interfaces after restore
+      command: ifreload -a
+
+    - name: Restart FRR to apply restored routing/MLAG
+      service:
+        name: frr
+        state: restarted
+
+- name: Delete NFS exports and client configs
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Remove NFS exports file
+      file:
+        path: /etc/exports
+        state: absent
+- name: Find all files in interfaces.d
+  hosts: clients,server
+  become: yes
+  tasks:
+    - name: Find all files in /etc/network/interfaces.d
+      command: "rm -r /etc/network/interfaces.d/*"
+      ignore_errors: yes
+
+- name: Restart networking to apply clean state
+  hosts: all
+  become: yes
+  tasks:
+    - name: Restart networking service
+      systemd:
+        name: networking
+        state: restarted
+- name: Uncomment ifupdownblacklist in netd.conf
+  hosts: switches
+  become: yes
+
+  tasks:
+    - name: Uncomment ifupdownblacklist line in netd.conf
+      replace:
+        path: /etc/netd.conf
+        regexp: "^# (ifupdownblacklist.*)"
+        replace: '\1'
+
+    - name: Restart netd service
+      systemd:
+        name: netd
+        state: restarted
