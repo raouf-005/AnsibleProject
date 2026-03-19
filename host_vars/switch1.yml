@@ -1,10 +1,10 @@
-bridge_ports: "swp1,swp2,swp5"
+bridge_ports: "swp2,swp5,swp7"
 stp_ports:
-  - swp1
+  - swp7
   - swp2
   - swp5
 
-stp_blocked_port: swp1
+stp_blocked_port: swp3
 # host_vars/switch1.yml
 ansible_host: 192.168.198.11
 

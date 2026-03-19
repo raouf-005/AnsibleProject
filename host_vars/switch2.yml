@@ -14,4 +14,4 @@ stp_ports:
   - swp3
   - swp5
 
-stp_blocked_port: swp1
+stp_blocked_port: swp5
