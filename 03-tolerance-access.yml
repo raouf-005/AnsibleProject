@@ -8,15 +8,13 @@
 - name: 🚀 Configuration du cluster MLAG (Cumulus NCLU)
   hosts: switches
   become: yes
-  serial: 1 # ← CRITIQUE : configure les switches UN PAR UN pour éviter la contamination NCLU
+  serial: 1
   vars:
     mlag_sys_mac: "44:38:39:BE:EF:AA"
 
   tasks:
     - name: 🧹 Reset NCLU pending
       command: net abort
-      ignore_errors: yes
-      changed_when: false
 
     # ==========================================
     # ⚙️ SWITCH 1 — Primary
@@ -24,13 +22,12 @@
     - name: Configurer Switch 1
       command: "{{ item }}"
       loop:
-        - "net add bond bond-m1 bond slaves swp7"
+        - "net add bond bond-m1 bond slaves {{ sw1_machine1_port }}"
         - "net add bond bond-m1 clag id 1"
-        - "net add bond bond-m2 bond slaves swp8"
+        - "net add bond bond-m2 bond slaves {{ sw1_machine2_port }}"
         - "net add bond bond-m2 clag id 2"
-        - "net add bridge bridge ports bond-m1,bond-m2,swp2"
-        - "net add clag peer sys-mac 44:38:39:BE:EF:AA interface swp5-6 primary backup-ip 192.168.198.12"
-        - "net commit"
+        - "net add bridge bridge ports bond-m1,bond-m2,{{ sw1_uplink_port }}"
+        - "net add clag peer sys-mac 44:38:39:BE:EF:AA interface {{ sw1_peer_ports }} primary backup-ip 192.168.198.12"
       when: inventory_hostname == 'switch1'
 
     # ==========================================
@@ -39,13 +36,12 @@
     - name: Configurer Switch 2
       command: "{{ item }}"
       loop:
-        - "net add bond bond-m1 bond slaves swp6"
+        - "net add bond bond-m1 bond slaves {{ sw2_machine1_port }}"
         - "net add bond bond-m1 clag id 1"
-        - "net add bond bond-m2 bond slaves swp5"
+        - "net add bond bond-m2 bond slaves {{ sw2_machine2_port }}"
         - "net add bond bond-m2 clag id 2"
-        - "net add bridge bridge ports bond-m1,bond-m2,swp2"
-        - "net add clag peer sys-mac 44:38:39:BE:EF:AA interface swp3-4 secondary backup-ip 192.168.198.11"
-        - "net commit"
+        - "net add bridge bridge ports bond-m1,bond-m2,{{ sw2_uplink_port }}"
+        - "net add clag peer sys-mac 44:38:39:BE:EF:AA interface {{ sw2_peer_ports }} secondary backup-ip 192.168.198.11"
       when: inventory_hostname == 'switch2'
 
     # ==========================================
@@ -62,13 +58,15 @@
     - name: Configurer Switch 3
       command: "{{ item }}"
       loop:
-        - "net add bridge bridge ports swp2,swp3"
-        - "net add bridge bridge vids 1"
+        - "net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}"
         - "net add bridge bridge pvid 1"
-        - "net add vlan 1 ip address 192.168.1.1/24"
-        - "net add vlan 1 ip address 192.168.2.1/24"
-        - "net commit"
+        - "net add vlan 1 ip address 192.168.1.254/24"
+        - "net add vlan 1 ip address 192.168.2.254/24"
       when: inventory_hostname == 'switch3'
+
+    - name: Commit de la configuration MLAG
+      command: net commit
+      when: inventory_hostname in ['switch1', 'switch2', 'switch3']
 
     # ==========================================
     # 🔍 VÉRIFICATION
@@ -83,6 +81,7 @@
       debug:
         msg: "{{ clag_status.stdout_lines }}"
       when: inventory_hostname in ['switch1', 'switch2']
+
 - name: Ping de test entre les machines et les serveurs NFS
   hosts: machine2
   become: yes

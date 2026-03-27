@@ -9,8 +9,10 @@ stp_blocked_port: swp3
 ansible_host: 192.168.198.11
 
 peerlink_slaves: swp5-6
-peer_mgmt_ip: 192.168.19<8.12 # switch2 mgmt IP
+peer_mgmt_ip: 192.168.198.12 # switch2 mgmt IP
 clag_priority: 4096 # lower = primary
-machine1_port: swp4
-machine2_port: swp7
-uplink_port: swp1
+machine1_port: swp7
+machine2_port: swp8
+uplink_port: swp2
+
+maxport: 8

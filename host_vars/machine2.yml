@@ -7,7 +7,7 @@ bond_slaves:
   - ens35 # cable to switch2
 bond_ip: 192.168.2.10
 bond_netmask: 255.255.255.0
-bond_gateway: 192.168.2.1
+bond_gateway: 192.168.2.254
 bond_mode: 802.3ad
 bond_miimon: 100
 bond_lacp_rate: fast

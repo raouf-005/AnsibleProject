@@ -6,3 +6,19 @@ sw3_switch2_port: swp3
 sw3_ip_toward_sw1: 192.168.1.1 # gateway for machine1 subnet
 sw3_ip_toward_sw2: 192.168.2.1 # gateway for machine2 subnet
 bridge_ports: "swp2,swp3"
+
+# Inter-switch link (vers switch3b) — définir si vous voulez une IP point-à-point
+# Exemple: swp4_ip: "192.168.250.1/30"
+# swp4_ip: "192.168.250.1/30"
+
+# Adresses virtuelles VRRP (VIP) — partagées avec SW4
+vrrp_vip_toward_sw1: "192.168.1.254"
+vrrp_vip_toward_sw2: "192.168.2.254"
+
+vrrp_id_sw1_side: 10
+vrrp_id_sw2_side: 20
+
+vrrp_priority: 254 # Master — priorité haute
+vrrp_advert_interval: 5000 # en ms, comme la doc Cumulus
+
+maxport: 3

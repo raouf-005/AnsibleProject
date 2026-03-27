@@ -8,7 +8,7 @@
       switch1: "config_backup-2026-03-18-20.08.12_cumulus-perm"
       switch2: "config_backup-2026-03-18-20.18.36_cumulus-perm"
       switch3: "config_backup-2026-03-18-20.08.12_cumulus-perm"
-
+      switch3b: "config_backup-2026-03-25-17.40.57_cumulus-perm"
   tasks:
     - name: Restore the permanent backup for this switch
       command: "config-restore -f -b {{ backup_files[inventory_hostname] }}"
