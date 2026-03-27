@@ -20,9 +20,9 @@
 - name: "[Switch1] Port access VLAN 10 → machine1"
   command: "{{ item }}"
   loop:
-    - net add interface {{ sw1_machine1_port }} bridge access {{ vlan_machine1 }}
-    - net add interface {{ sw1_uplink_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add bridge bridge ports {{ sw1_uplink_port }},{{ sw1_machine1_port }}
+    - net add interface {{ hostvars['switch1']['sw1_machine1_port'] }} bridge access {{ vlan_machine1 }}
+    - net add interface {{ hostvars['switch1']['sw1_uplink_port'] }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge ports {{ hostvars['switch1']['sw1_uplink_port'] }},{{ hostvars['switch1']['sw1_machine1_port'] }}
     - net add bridge bridge vids {{ vlan_machine1 }},{{ vlan_machine2 }}
     - net add bridge bridge pvid 1
     - net commit
@@ -33,9 +33,9 @@
 - name: "[Switch2] Port access VLAN 20 → machine2"
   command: "{{ item }}"
   loop:
-    - net add interface {{ sw2_machine2_port }} bridge access {{ vlan_machine2 }}
-    - net add interface {{ sw2_uplink_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add bridge bridge ports {{ sw2_uplink_port }},{{ sw2_machine2_port }}
+    - net add interface {{ hostvars['switch2']['sw2_machine2_port'] }} bridge access {{ vlan_machine2 }}
+    - net add interface {{ hostvars['switch2']['sw2_uplink_port'] }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge ports {{ hostvars['switch2']['sw2_uplink_port'] }},{{ hostvars['switch2']['sw2_machine2_port'] }}
     - net add bridge bridge vids {{ vlan_machine1 }},{{ vlan_machine2 }}
     - net add bridge bridge pvid 1
     - net commit
@@ -46,9 +46,9 @@
 - name: "[Switch3] Trunks vers switch1 et switch2"
   command: "{{ item }}"
   loop:
-    - net add interface {{ sw3_switch1_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add interface {{ sw3_switch2_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-    - net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}
+    - net add interface {{ hostvars['switch3']['sw3_switch1_port'] }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add interface {{ hostvars['switch3']['sw3_switch2_port'] }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
+    - net add bridge bridge ports {{ hostvars['switch3']['sw3_switch1_port'] }},{{ hostvars['switch3']['sw3_switch2_port'] }}
     - net add bridge bridge vids {{ vlan_machine1 }},{{ vlan_machine2 }}
     - net add bridge bridge pvid 1
     - net commit

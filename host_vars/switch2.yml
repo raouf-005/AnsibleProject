@@ -4,9 +4,14 @@ ansible_host: 192.168.198.12
 peerlink_slaves: swp5-6
 peer_mgmt_ip: 192.168.198.11 # switch2 mgmt IP
 clag_priority: 4096 # lower = primary
-machine1_port: swp6
-machine2_port: swp5
-uplink_port: swp2
+
+# Per-switch logical ports are defined centrally in group_vars/all.yml
+# Keep only host-specific settings here to avoid redundancy.
+sw2_uplink_port: "swp2"
+sw2_vlan_transit_port: "swp2"
+sw2_peer_ports: "swp3-4"
+sw2_machine2_port: "swp5"
+sw2_machine1_port: "swp6"
 
 bridge_ports: "swp2,swp3,swp5"
 stp_ports:

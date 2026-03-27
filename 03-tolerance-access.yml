@@ -5,7 +5,7 @@
   roles:
     - mlag-client
 
-- name: 🚀 Configuration du cluster MLAG (Cumulus NCLU)
+- name: 🚀 Configuration MLAG et Accès
   hosts: switches
   become: yes
   serial: 1
@@ -15,56 +15,47 @@
   tasks:
     - name: 🧹 Reset NCLU pending
       command: net abort
-
-    # ==========================================
-    # ⚙️ SWITCH 1 — Primary
-    # ==========================================
-    - name: Configurer Switch 1
-      command: "{{ item }}"
-      loop:
-        - "net add bond bond-m1 bond slaves {{ sw1_machine1_port }}"
-        - "net add bond bond-m1 clag id 1"
-        - "net add bond bond-m2 bond slaves {{ sw1_machine2_port }}"
-        - "net add bond bond-m2 clag id 2"
-        - "net add bridge bridge ports bond-m1,bond-m2,{{ sw1_uplink_port }}"
-        - "net add clag peer sys-mac 44:38:39:BE:EF:AA interface {{ sw1_peer_ports }} primary backup-ip 192.168.198.12"
-      when: inventory_hostname == 'switch1'
-
-    # ==========================================
-    # ⚙️ SWITCH 2 — Secondary
-    # ==========================================
-    - name: Configurer Switch 2
-      command: "{{ item }}"
-      loop:
-        - "net add bond bond-m1 bond slaves {{ sw2_machine1_port }}"
-        - "net add bond bond-m1 clag id 1"
-        - "net add bond bond-m2 bond slaves {{ sw2_machine2_port }}"
-        - "net add bond bond-m2 clag id 2"
-        - "net add bridge bridge ports bond-m1,bond-m2,{{ sw2_uplink_port }}"
-        - "net add clag peer sys-mac 44:38:39:BE:EF:AA interface {{ sw2_peer_ports }} secondary backup-ip 192.168.198.11"
-      when: inventory_hostname == 'switch2'
-
-    # ==========================================
-    # ⚙️ SWITCH 3 — Routeur L3
-    # ==========================================
-    - name: Déclarer les interfaces sur Switch 3
-      command: "{{ item }}"
-      loop:
-        - "net add interface swp2"
-        - "net add interface swp3"
       ignore_errors: yes
-      when: inventory_hostname == 'switch3'
 
-    - name: Configurer Switch 3
+    # ==========================================
+    # ⚙️ SWITCH 1 & 2 — MLAG + VLANs
+    # ==========================================
+    - name: Configurer Switch 1 et 2 (Leafs)
       command: "{{ item }}"
       loop:
-        - "net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}"
-        - "net add bridge bridge pvid 1"
-        - "net add vlan 1 ip address 192.168.1.254/24"
-        - "net add vlan 1 ip address 192.168.2.254/24"
+        # Ports vers les machines en Access (VLAN 10 et 20)
+        - "net add bond bond-m1 bond slaves {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_machine1_port'] }}"
+        - "net add bond bond-m1 clag id 1"
+        - "net add interface bond-m1 bridge access 10"
+        - "net add bond bond-m2 bond slaves {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_machine2_port'] }}"
+        - "net add bond bond-m2 clag id 2"
+        - "net add interface bond-m2 bridge access 20"
+
+        # Activer le bridge VLAN-aware et les Trunks vers Switch 3 (et futur 3b)
+        - "net add bridge bridge vlan-aware"
+        - "net add bridge bridge ports bond-m1,bond-m2,{{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_uplink_port'] }}"
+        - "net add interface {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_uplink_port'] }} bridge trunk vlans 10,20"
+
+        # Peerlink MLAG
+        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_peer_ports'] }} {{ 'primary backup-ip 192.168.198.12' if inventory_hostname == 'switch1' else 'secondary backup-ip 192.168.198.11' }}"
+      when: inventory_hostname in ['switch1', 'switch2']
+
+    # ==========================================
+    # ⚙️ SWITCH 3 — Un seul Routeur L3
+    # ==========================================
+    - name: Configurer Switch 3 (Gateway unique)
+      command: "{{ item }}"
+      loop:
+        - "net add bridge bridge vlan-aware"
+        - "net add bridge bridge ports {{ hostvars['switch3']['sw3_switch1_port'] }},{{ hostvars['switch3']['sw3_switch2_port'] }}"
+        - "net add interface {{ hostvars['switch3']['sw3_switch1_port'] }} bridge trunk vlans 10,20"
+        - "net add interface {{ hostvars['switch3']['sw3_switch2_port'] }} bridge trunk vlans 10,20"
+        # Adresses IP .254 directement sur les VLANs
+        - "net add vlan 10 ip address 192.168.1.254/24"
+        - "net add vlan 20 ip address 192.168.2.254/24"
       when: inventory_hostname == 'switch3'
 
-    - name: Commit de la configuration MLAG
+    - name: Commit de la configuration
       command: net commit
       when: inventory_hostname in ['switch1', 'switch2', 'switch3']
 
@@ -82,11 +73,11 @@
         msg: "{{ clag_status.stdout_lines }}"
       when: inventory_hostname in ['switch1', 'switch2']
 
-- name: Ping de test entre les machines et les serveurs NFS
+- name: Ping de test entre les machines
   hosts: machine2
   become: yes
   tasks:
-    - name: Ping de test
-      command: ping -c 3 {{ hostvars["machine1"]['bond_ip'] }}
+    - name: Ping de test vers la passerelle
+      command: ping -c 3 192.168.2.254
       register: ping_result
       changed_when: false

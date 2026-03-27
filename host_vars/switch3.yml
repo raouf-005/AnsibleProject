@@ -1,8 +1,12 @@
 # host_vars/switch3.yml
 ansible_host: 192.168.198.13
 
-sw3_switch1_port: swp2
-sw3_switch2_port: swp3
+# Per-switch logical ports are defined centrally in group_vars/all.yml
+# Keep only host-specific settings here to avoid redundancy.
+sw3_uplink_port: "swp1"
+sw3_vlan_transit_ports: "swp2-3"
+sw3_switch1_port: "swp2"
+sw3_switch2_port: "swp3"
 sw3_ip_toward_sw1: 192.168.1.1 # gateway for machine1 subnet
 sw3_ip_toward_sw2: 192.168.2.1 # gateway for machine2 subnet
 bridge_ports: "swp2,swp3"

@@ -8,12 +8,15 @@
       switch1: "config_backup-2026-03-18-20.08.12_cumulus-perm"
       switch2: "config_backup-2026-03-18-20.18.36_cumulus-perm"
       switch3: "config_backup-2026-03-18-20.08.12_cumulus-perm"
-      switch3b: "config_backup-2026-03-25-17.40.57_cumulus-perm"
+      switch3b: "config_backup-2026-03-27-18.58.21_cumulus-perm"
   tasks:
     - name: Restore the permanent backup for this switch
       command: "config-restore -f -b {{ backup_files[inventory_hostname] }}"
       register: restore_result
 
+    - name: net abort pour annuler les changements en attente
+      command: net abort
+      ignore_errors: yes
     - name: Show restore result
       debug:
         msg: "{{ restore_result.stdout_lines | default([]) }}"

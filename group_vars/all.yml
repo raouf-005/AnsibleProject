@@ -45,24 +45,12 @@ bond_iface2: "ens35"
 # --- CABLAGE / TOPOLOGIE PHYSIQUE (Mis à jour selon le tableau) ---
 
 # Switch 3 (Gateway / Distribution Layer)
-sw3_uplink_port: "swp1"
-sw3_vlan_transit_ports: "swp2-3" # Rows 2-3 (Connect to SW1, SW2)
-# Miscellaneous/BGP
-sw3_ip_toward_sw2: "192.168.2.1"
-sw3_ip_toward_sw1: "192.168.1.1"
+# sw3 per-switch ports moved to host_vars/switch3.yml
+# Miscellaneous/BGP (moved to host_vars/switch3.yml)
 # Switch 1 (MLAG PEER 1/A)
-sw1_uplink_port: "swp2"
-sw1_vlan_transit_port: "swp2" # Row 2 (Connect to SW3)
-sw1_nfs_ports: "swp3-4" # Rows 5-6 (Connect to NFS ens35/34)
-sw1_peer_ports: "swp5-6" # Rows 7-8 (MLAG Peering links to SW2)
-sw1_machine1_port: "swp7"
-sw1_machine2_port: "swp8"
+# sw1 per-switch ports moved to host_vars/switch1.yml
 # Switch 2 (MLAG PEER 2/B)
-sw2_uplink_port: "swp2"
-sw2_vlan_transit_port: "swp2" # Row 3 (Connect to SW3)
-sw2_peer_ports: "swp3-4" # Rows 12-13 (MLAG Peering links to SW1:swp5-6)
-sw2_machine2_port: "swp5" # Row 14 (Connect to M2 ens34)
-sw2_machine1_port: "swp6" # Row 15 (Connect to M1 ens35) - segment mlag2
+# sw2 per-switch ports moved to host_vars/switch2.yml
 
 # ------------------------------------------------------------------
 
