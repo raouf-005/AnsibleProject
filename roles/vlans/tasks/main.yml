@@ -54,12 +54,3 @@
     - net commit
   when: inventory_hostname == "switch3"
   ignore_errors: true
-# ============================================================
-# Or i can do the bridge only for vlan_machine2 = 20 and remove the trunk vlan_machine1 = 10 since it is not used on switch2 and switch3,
-# but it is better to have the same vlan configuration on all switches for consistency and future scalability
-#   - net add interface {{ sw3_switch1_port }} bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
-#   - net add interface {{ sw3_switch2_port }} bridge trunk vlans {{ vlan_machine2 }}
-#   - net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}
-#   - net add bridge bridge vids {{ vlan_machine2 }}
-#   - net commit
-# avec le trajet   nfs (vlan20,vlan10) <->  switch1 (vlan20) <-> switch3 (vlan20) <-> switch2 (vlan20) cela fonctionne aussi pour le vlan20, mais le vlan10 ne serait pas transporté vers switch2 et machine2, ce qui n'est pas idéal pour la cohérence de la configuration et la possibilité d'ajouter d'autres machines dans le futur sur vlan10 via switch2

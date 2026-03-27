@@ -1,0 +1,13 @@
+auto vlan10
+iface vlan10
+    address {{ vrrp_vlan10_real_ip }}/24
+    vlan-id 10
+    vlan-raw-device bridge
+    address-virtual 00:00:5e:00:01:01 {{ gw_vlan10 }}/24
+
+auto vlan20
+iface vlan20
+    address {{ vrrp_vlan20_real_ip }}/24
+    vlan-id 20
+    vlan-raw-device bridge
+    address-virtual 00:00:5e:00:01:02 {{ gw_vlan20 }}/24

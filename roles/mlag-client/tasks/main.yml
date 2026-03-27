@@ -1,9 +1,4 @@
 ---
-- name: Mettre à jour le cache APT
-  ansible.builtin.apt:
-    update_cache: yes
-  changed_when: false
-
 - name: Installer le paquet ifenslave (nécessaire pour le bonding sous Debian)
   ansible.builtin.apt:
     name: ifenslave

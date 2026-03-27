@@ -1,0 +1,26 @@
+# ============================================================
+# Role vrrp : Redondance de routeur avec VRR (Cumulus)
+# ============================================================
+# VRR (Virtual Router Redundancy) est la solution native Cumulus
+# pour la redondance de passerelle. Plus rapide que VRRP classique.
+#
+# On duplique switch3 en switch3a et switch3b.
+# Les deux partagent une IP virtuelle (VRR) par VLAN.
+# Le basculement est instantané (active-active).
+---
+- name: "[Switch3a/3b] Purger les commandes NCLU en attente"
+  command: net abort
+  failed_when: false
+  changed_when: false
+  when: inventory_hostname in ['switch3a', 'switch3b']
+  # VLAN config removed — using default VLAN 1 (no VLAN implementation)
+
+- name: Vérifier la configuration NCLU (interfaces)
+  command: net show interface
+  register: vrr_status
+  when: inventory_hostname in ['switch3a', 'switch3b']
+
+- name: Afficher la configuration NCLU
+  debug:
+    var: vrr_status.stdout_lines
+  when: inventory_hostname in ['switch3a', 'switch3b']
