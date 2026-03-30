@@ -65,7 +65,7 @@
 - name: "[Switch1] Configurer LACP côté switch pour le serveur"
   command: "{{ item }}"
   loop:
-    - net add bond bond-serveur bond slaves {{ sw1_nfs_ports }}
+    - net add bond bond-serveur bond slaves {{ hostvars['switch1']['sw1_nfs_ports'] }}
     - net add bond bond-serveur bond mode 802.3ad
     - net add bond bond-serveur bridge trunk vlans {{ vlan_machine1 }},{{ vlan_machine2 }}
     - net add bridge bridge ports bond-serveur

@@ -22,3 +22,4 @@ sw1_machine1_port: "swp7"
 sw1_machine2_port: "swp8"
 
 maxport: 8
+sw1_uplink_portRedundance: "swp9"

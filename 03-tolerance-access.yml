@@ -10,7 +10,7 @@
   become: yes
   serial: 1
   vars:
-    mlag_sys_mac: "44:38:39:BE:EF:AA"
+    mlag_sys_mac: "44:38:39:FF:EF:AA"
 
   tasks:
     - name: 🧹 Reset NCLU pending
@@ -20,25 +20,41 @@
     # ==========================================
     # ⚙️ SWITCH 1 & 2 — MLAG + VLANs
     # ==========================================
-    - name: Configurer Switch 1 et 2 (Leafs)
+
+    - name: Configurer Switch 1
       command: "{{ item }}"
       loop:
-        # Ports vers les machines en Access (VLAN 10 et 20)
-        - "net add bond bond-m1 bond slaves {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_machine1_port'] }}"
+        - "net add bond bond-m1 bond slaves {{ sw1_machine1_port }}"
         - "net add bond bond-m1 clag id 1"
-        - "net add interface bond-m1 bridge access 10"
-        - "net add bond bond-m2 bond slaves {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_machine2_port'] }}"
+        - "net add bond bond-m2 bond slaves {{ sw1_machine2_port }}"
         - "net add bond bond-m2 clag id 2"
-        - "net add interface bond-m2 bridge access 20"
-
-        # Activer le bridge VLAN-aware et les Trunks vers Switch 3 (et futur 3b)
+        - "net add bridge bridge ports bond-m1,bond-m2,{{ sw1_uplink_port }}"
+        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ sw1_peer_ports }} primary backup-ip 192.168.198.12"
+        - "net add interface peerlink.4094 clag priority 2048 "
+        - "net add bond bond-m1 bridge access 10"
+        - "net add bond bond-m2 bridge access 20"
         - "net add bridge bridge vlan-aware"
-        - "net add bridge bridge ports bond-m1,bond-m2,{{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_uplink_port'] }}"
-        - "net add interface {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_uplink_port'] }} bridge trunk vlans 10,20"
+        - "net add interface {{ sw1_uplink_port }} bridge trunk vlans 10,20"
+      when: inventory_hostname == 'switch1'
 
-        # Peerlink MLAG
-        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ hostvars[inventory_hostname][inventory_hostname[0:3] + '_peer_ports'] }} {{ 'primary backup-ip 192.168.198.12' if inventory_hostname == 'switch1' else 'secondary backup-ip 192.168.198.11' }}"
-      when: inventory_hostname in ['switch1', 'switch2']
+    # ==========================================
+    # ⚙️ SWITCH 2 — Secondary
+    # ==========================================
+    - name: Configurer Switch 2
+      command: "{{ item }}"
+      loop:
+        - "net add bond bond-m1 bond slaves {{ sw2_machine1_port }}"
+        - "net add bond bond-m1 clag id 1"
+        - "net add bond bond-m2 bond slaves {{ sw2_machine2_port }}"
+        - "net add bond bond-m2 clag id 2"
+        - "net add bridge bridge ports bond-m1,bond-m2,{{ sw2_uplink_port }}"
+        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ sw2_peer_ports }} secondary backup-ip 192.168.198.11"
+        - "net add interface peerlink.4094 clag priority 4064 "
+        - "net add bond bond-m1 bridge access 10"
+        - "net add bond bond-m2 bridge access 20"
+        - "net add bridge bridge vlan-aware"
+        - "net add interface {{ sw2_uplink_port }} bridge trunk vlans 10,20"
+      when: inventory_hostname == 'switch2'
 
     # ==========================================
     # ⚙️ SWITCH 3 — Un seul Routeur L3
@@ -78,6 +94,6 @@
   become: yes
   tasks:
     - name: Ping de test vers la passerelle
-      command: ping -c 3 192.168.2.254
+      command: ping -c 3 192.168.2.10
       register: ping_result
       changed_when: false

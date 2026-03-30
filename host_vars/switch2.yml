@@ -1,4 +1,4 @@
-# host_vars/switch1.yml
+# host_vars/switch2.yml
 ansible_host: 192.168.198.12
 
 peerlink_slaves: swp5-6
@@ -20,5 +20,7 @@ stp_ports:
   - swp5
 
 stp_blocked_port: swp5
+
+sw2_uplink_portRedundance: "swp7"
 
 maxport: 6
