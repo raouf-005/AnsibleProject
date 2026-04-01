@@ -1,20 +1,30 @@
 ---
+############################################
+# VRRP MASTER
+############################################
+
 - name: Configure VRRP MASTER
   hosts: switch3
   become: yes
 
   tasks:
+    - name: Cancel pending config
+      command: net abort
+      ignore_errors: yes
+
+    - name: Restore configuration from backup
+      command: "config-restore -f -b config_backup-2026-03-18-20.08.12_cumulus-perm"
+      register: restore_result
+
+    - name: Show restore result
+      debug:
+        msg: "{{ restore_result.stdout_lines | default([]) }}"
+
     - name: Enable IP forwarding
       sysctl:
         name: net.ipv4.ip_forward
         value: "1"
         state: present
-
-    - name: Enable VRRP daemon
-      lineinfile:
-        path: /etc/frr/daemons
-        regexp: "^vrrpd="
-        line: "vrrpd=yes"
 
     - name: Restart FRR
       systemd:
@@ -28,43 +38,40 @@
         - net add bridge bridge ports swp2,swp3
         - net add interface swp2 bridge trunk vlans 10,20
         - net add interface swp3 bridge trunk vlans 10,20
+        - net add vlan 10
+        - net add vlan 20
         - net add vlan 10 ip address 192.168.1.3/24
         - net add vlan 20 ip address 192.168.2.3/24
-        - net commit
 
-    - name: Configure VRRP
-      shell: |
-        vtysh << EOF
-        configure terminal
-        interface vlan10
-        vrrp 10 ip 192.168.1.254
-        vrrp 10 priority 150
-        vrrp 10 preempt
-        exit
-        interface vlan20
-        vrrp 20 ip 192.168.2.254
-        vrrp 20 priority 150
-        vrrp 20 preempt
-        exit
-        end
-        write memory
-        EOF
+    - name: Configure VRRP MASTER
+      command: "{{ item }}"
+      loop:
+        - net add vlan 10 vrrp 10 192.168.1.254/24
+        - net add vlan 10 vrrp 10 advertisement-interval 1000
+        - net add vlan 20 vrrp 20 192.168.2.254/24
+        - net add vlan 20 vrrp 20 advertisement-interval 1000
+
+    - name: Commit configuration
+      command: net commit
+
+############################################
+# VRRP BACKUP
+############################################
+
 - name: Configure VRRP BACKUP
   hosts: switch3b
   become: yes
 
   tasks:
+    - name: Cancel pending config
+      command: net abort
+      ignore_errors: yes
+
     - name: Enable IP forwarding
       sysctl:
         name: net.ipv4.ip_forward
         value: "1"
         state: present
-
-    - name: Enable VRRP daemon
-      lineinfile:
-        path: /etc/frr/daemons
-        regexp: "^vrrpd="
-        line: "vrrpd=yes"
 
     - name: Restart FRR
       systemd:
@@ -78,46 +85,62 @@
         - net add bridge bridge ports swp2,swp3
         - net add interface swp2 bridge trunk vlans 10,20
         - net add interface swp3 bridge trunk vlans 10,20
+        - net add vlan 10
+        - net add vlan 20
         - net add vlan 10 ip address 192.168.1.4/24
         - net add vlan 20 ip address 192.168.2.4/24
-        - net commit
 
-    - name: Configure VRRP
-      shell: |
-        vtysh << EOF
-        configure terminal
-        interface vlan10
-        vrrp 10 ip 192.168.1.254
-        vrrp 10 priority 100
-        exit
-        interface vlan20
-        vrrp 20 ip 192.168.2.254
-        vrrp 20 priority 100
-        exit
-        end
-        write memory
-        EOF
+    - name: Configure VRRP BACKUP
+      command: "{{ item }}"
+      loop:
+        - net add vlan 10 vrrp 10 192.168.1.254/24
+        - net add vlan 20 vrrp 20 192.168.2.254/24
 
-- name: Configure Leaf 1 switch
+    - name: Commit configuration
+      command: net commit
+
+############################################
+# LEAF SWITCH 1
+############################################
+
+- name: Configure Leaf 1
   hosts: switch1
   become: yes
 
   tasks:
-    - name: Create VLAN aware bridge
+    - name: Cancel pending config
+      command: net abort
+      ignore_errors: yes
+
+    - name: Configure bridge
       command: "{{ item }}"
       loop:
-        - "net add bridge bridge ports {{ sw1_uplink_portRedundance }}"
-        - net add interface {{ sw1_uplink_portRedundance }} bridge trunk vlans 10,20 ## juste pour confirmer
-        - net commit
+        - net add bridge bridge vlan-aware
+        - net add bridge bridge ports {{ sw1_uplink_portRedundance }}
+        - net add interface {{ sw1_uplink_portRedundance }} bridge trunk vlans 10,20
 
-- name: Configure Leaf 2 switch
+    - name: Commit configuration
+      command: net commit
+
+############################################
+# LEAF SWITCH 2
+############################################
+
+- name: Configure Leaf 2
   hosts: switch2
   become: yes
 
   tasks:
-    - name: Create VLAN aware bridge
+    - name: Cancel pending config
+      command: net abort
+      ignore_errors: yes
+
+    - name: Configure bridge
       command: "{{ item }}"
       loop:
-        - "net add bridge bridge ports {{ sw2_uplink_portRedundance }}"
+        - net add bridge bridge vlan-aware
+        - net add bridge bridge ports {{ sw2_uplink_portRedundance }}
         - net add interface {{ sw2_uplink_portRedundance }} bridge trunk vlans 10,20
-        - net commit
+
+    - name: Commit configuration
+      command: net commit

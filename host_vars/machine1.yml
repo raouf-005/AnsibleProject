@@ -5,7 +5,7 @@ bond_name: bond0
 bond_slaves:
   - ens34 # cable to switch1
   - ens35 # cable to switch2
-bond_ip: 192.168.1.10
+bond_ip: 192.168.1.10/24
 bond_netmask: 255.255.255.0
 bond_gateway: 192.168.1.254
 bond_mode: 802.3ad

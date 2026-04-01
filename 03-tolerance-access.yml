@@ -13,10 +13,6 @@
     mlag_sys_mac: "44:38:39:FF:EF:AA"
 
   tasks:
-    - name: 🧹 Reset NCLU pending
-      command: net abort
-      ignore_errors: yes
-
     # ==========================================
     # ⚙️ SWITCH 1 & 2 — MLAG + VLANs
     # ==========================================
@@ -29,12 +25,14 @@
         - "net add bond bond-m2 bond slaves {{ sw1_machine2_port }}"
         - "net add bond bond-m2 clag id 2"
         - "net add bridge bridge ports bond-m1,bond-m2,{{ sw1_uplink_port }}"
-        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ sw1_peer_ports }} primary backup-ip 192.168.198.12"
-        - "net add interface peerlink.4094 clag priority 2048 "
+        - "net add bridge bridge vlan-aware"
         - "net add bond bond-m1 bridge access 10"
         - "net add bond bond-m2 bridge access 20"
-        - "net add bridge bridge vlan-aware"
         - "net add interface {{ sw1_uplink_port }} bridge trunk vlans 10,20"
+        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ sw1_peer_ports }} primary backup-ip 192.168.198.12 vrf mgmt"
+        - "net add interface peerlink.4094 clag priority 2048 "
+        - "net add interface peerlink.4094 clag args --initDelay  300"
+        - " net add bridge stp treeprio 8192"
       when: inventory_hostname == 'switch1'
 
     # ==========================================
@@ -48,31 +46,47 @@
         - "net add bond bond-m2 bond slaves {{ sw2_machine2_port }}"
         - "net add bond bond-m2 clag id 2"
         - "net add bridge bridge ports bond-m1,bond-m2,{{ sw2_uplink_port }}"
-        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ sw2_peer_ports }} secondary backup-ip 192.168.198.11"
-        - "net add interface peerlink.4094 clag priority 4064 "
+        - "net add bridge bridge vlan-aware"
         - "net add bond bond-m1 bridge access 10"
         - "net add bond bond-m2 bridge access 20"
-        - "net add bridge bridge vlan-aware"
         - "net add interface {{ sw2_uplink_port }} bridge trunk vlans 10,20"
+        - "net add clag peer sys-mac {{ mlag_sys_mac }} interface {{ sw2_peer_ports }} secondary backup-ip 192.168.198.11 vrf mgmt"
+        - "net add interface peerlink.4094 clag priority 3064 "
+        - "net add interface peerlink.4094 clag args --initDelay  300"
+        - " net add bridge stp treeprio 8192"
+
       when: inventory_hostname == 'switch2'
 
     # ==========================================
     # ⚙️ SWITCH 3 — Un seul Routeur L3
     # ==========================================
+    - name: Restore the permanent backup for this switch
+      command: "config-restore -f -b config_backup-2026-03-18-20.08.12_cumulus-perm"
+      when: inventory_hostname == 'switch3'
+    - name: net abort pour annuler les changements en attente
+      command: net abort
+      ignore_errors: yes
+      when: inventory_hostname == 'switch3'
+    - name: ifrelaod pour appliquer la configuration restaurée
+      command: ifreload -a
+      when: inventory_hostname == 'switch3'
+
     - name: Configurer Switch 3 (Gateway unique)
       command: "{{ item }}"
       loop:
         - "net add bridge bridge vlan-aware"
-        - "net add bridge bridge ports {{ hostvars['switch3']['sw3_switch1_port'] }},{{ hostvars['switch3']['sw3_switch2_port'] }}"
-        - "net add interface {{ hostvars['switch3']['sw3_switch1_port'] }} bridge trunk vlans 10,20"
-        - "net add interface {{ hostvars['switch3']['sw3_switch2_port'] }} bridge trunk vlans 10,20"
+        - "net add bridge bridge ports {{ sw3_switch1_port }},{{ sw3_switch2_port }}"
+        - "net add interface {{ sw3_switch1_port }} bridge trunk vlans 10,20"
+        - "net add interface {{ sw3_switch2_port }} bridge trunk vlans 10,20"
         # Adresses IP .254 directement sur les VLANs
         - "net add vlan 10 ip address 192.168.1.254/24"
         - "net add vlan 20 ip address 192.168.2.254/24"
       when: inventory_hostname == 'switch3'
 
     - name: Commit de la configuration
+      become: yes
       command: net commit
+      ignore_errors: yes
       when: inventory_hostname in ['switch1', 'switch2', 'switch3']
 
     # ==========================================

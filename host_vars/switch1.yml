@@ -21,5 +21,5 @@ sw1_peer_ports: "swp5-6"
 sw1_machine1_port: "swp7"
 sw1_machine2_port: "swp8"
 
-maxport: 8
+maxport: 9
 sw1_uplink_portRedundance: "swp9"

@@ -1,7 +1,7 @@
 # host_vars/switch2.yml
 ansible_host: 192.168.198.12
 
-peerlink_slaves: swp5-6
+#peerlink_slaves: swp5-6
 peer_mgmt_ip: 192.168.198.11 # switch2 mgmt IP
 clag_priority: 4096 # lower = primary
 
@@ -23,4 +23,4 @@ stp_blocked_port: swp5
 
 sw2_uplink_portRedundance: "swp7"
 
-maxport: 6
+maxport: 7

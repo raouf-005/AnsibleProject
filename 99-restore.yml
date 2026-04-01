@@ -50,7 +50,7 @@
         state: absent
 
 - name: Find all files in interfaces.d
-  hosts: clients,server
+  hosts: clients,servers
   become: yes
   tasks:
     - name: Find all files in /etc/network/interfaces.d
@@ -66,7 +66,7 @@
       loop: "{{ iface_files.files }}"
 
 - name: Restart networking to apply clean state
-  hosts: machines, servers
+  hosts: machines,servers
   become: yes
   tasks:
     - name: Restart networking service
@@ -93,3 +93,25 @@
         name: rpcbind
         state: stopped
         enabled: no
+
+- name: Activate ports Switches
+  hosts: switches
+  become: yes
+
+  tasks:
+    - name: ifreload to apply the port activation
+      command: ifreload -a
+
+    - name: restart systemd to apply changes
+      systemd:
+        name: systemd-networkd
+        state: restarted
+
+- name: Ensure hostname on Cumulus switches
+  hosts: switches,T4
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Set hostname to inventory hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"

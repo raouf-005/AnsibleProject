@@ -3,11 +3,10 @@
 # Configuration des interfaces physiques (elles sont gérées par le bond)
 auto {{ bond_iface1 }}
 iface {{ bond_iface1 }} inet manual
-    bond-master {{ bond_name }}
+
 
 auto {{ bond_iface2 }}
 iface {{ bond_iface2 }} inet manual
-    bond-master {{ bond_name }}
 
 # Configuration de l'agrégat LACP (Actif/Actif)
 auto {{ bond_name }}
@@ -22,4 +21,5 @@ iface {{ bond_name }} inet static
     bond-slaves {{ bond_iface1 }} {{ bond_iface2 }}
     bond-mode 802.3ad
     bond-miimon 100
+    bond-lacp-rate fast
     bond-xmit-hash-policy layer3+4
