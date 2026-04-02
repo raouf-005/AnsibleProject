@@ -1,0 +1,179 @@
+# ============================================================
+# TESTS PARTIE 1 : NFS, VLAN, bonding
+# ============================================================
+# Ce playbook contient uniquement les validations.
+# Il s'exécute après 01-nfs-partage.yml.
+#
+# Exemples :
+#   ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i inventories/hosts.ini 01-nfs-test.yml --tags nfs
+#   ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i inventories/hosts.ini 01-nfs-test.yml --tags vlan
+#   ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i inventories/hosts.ini 01-nfs-test.yml --tags bonding
+# ============================================================
+---
+- name: "[Partie 1][Test NFS] Validation des montages NFS"
+  hosts: clients
+  become: yes
+  tags: ["nfs"]
+  tasks:
+    - name: Vérifier que le point de montage est bien monté
+      command: mountpoint {{ nfs_client_mounts[inventory_hostname] }}
+      register: mountpoint_check
+      changed_when: false
+
+    - name: Ecrire un fichier de test NFS
+      copy:
+        content: "Test NFS final depuis {{ inventory_hostname }} - {{ ansible_date_time.iso8601 }}"
+        dest: "{{ nfs_client_mounts[inventory_hostname] }}/test_nfs_{{ inventory_hostname }}.txt"
+
+    - name: Lire le fichier de test NFS
+      command: cat {{ nfs_client_mounts[inventory_hostname] }}/test_nfs_{{ inventory_hostname }}.txt
+      register: nfs_readback
+      changed_when: false
+
+    - name: Afficher la preuve NFS
+      debug:
+        var: nfs_readback.stdout
+
+- name: "[Partie 1][Test VLAN] Validation VLAN et isolation"
+  hosts: clients
+  become: yes
+  tags: ["vlan", "isolation"]
+  tasks:
+    - name: Vérifier l'accès au serveur NFS dans le VLAN local
+      command: ping -c 3 -W 2 {{ nfs_server_ip_map[inventory_hostname] }}
+      register: ping_nfs_vlan
+      changed_when: false
+
+    - name: Vérifier l'isolation entre machine1 et machine2
+      command: ping -c 3 -W 2 {{ ip_machine2 if inventory_hostname == 'machine1' else ip_machine1 }}
+      register: ping_isolation
+      changed_when: false
+      failed_when: ping_isolation.rc == 0
+
+    - name: Vérifier que le port SSH (22/TCP) est injoignable entre clients
+      shell: 'timeout 3 bash -c ''cat < /dev/null > /dev/tcp/{{ ip_machine2 if inventory_hostname == "machine1" else ip_machine1 }}/22'''
+      register: ssh_isolation
+      changed_when: false
+      failed_when: ssh_isolation.rc == 0
+
+    - name: Afficher la validation VLAN
+      debug:
+        msg: "{{ inventory_hostname }} atteint son serveur NFS VLAN et reste isolée de l'autre machine (ping + SSH bloqués)"
+
+- name: "[Partie 1][Test Bonding] Validation du bond serveur"
+  hosts: serveur-nfs
+  become: yes
+  tags: ["bonding"]
+  tasks:
+    - name: Vérifier l'état du bond sur le serveur
+      command: cat /proc/net/bonding/{{ bond_name }}
+      register: serveur_bond_status
+      changed_when: false
+
+    - name: Afficher l'état du bond sur le serveur
+      debug:
+        var: serveur_bond_status.stdout_lines
+
+- name: "[Partie 1][Test Bonding] Validation côté switch1"
+  hosts: switch1
+  become: yes
+  tags: ["bonding"]
+  tasks:
+    - name: Afficher les bonds sur switch1
+      command: net show interface bonds
+      register: switch_bonds
+      changed_when: false
+
+    - name: Afficher le résultat bond switch1
+      debug:
+        var: switch_bonds.stdout_lines
+
+- name: "[Partie 1][Test Bonding] Test de panne manuel"
+  hosts: serveur-nfs
+  become: yes
+  tags: ["bonding"]
+  tasks:
+    - name: Afficher la procédure de test de panne du bond
+      debug:
+        msg: |
+          Test manuel de bonding :
+          1. Depuis machine1 ou machine2, lancer un transfert vers le partage NFS.
+          2. Débrancher ou désactiver {{ bond_iface1 }} côté serveur.
+          3. Vérifier que le transfert continue.
+          4. Refaire avec {{ bond_iface2 }}.
+          5. Conserver la sortie de cat /proc/net/bonding/{{ bond_name }} et net show interface bonds.
+
+- name: "[Partie 1][Test Résilience] Lancer un transfert continu vers NFS"
+  hosts: clients
+  become: yes
+  tags: ["bonding", "resilience"]
+  tasks:
+    - name: Démarrer un transfert d'écriture continu vers le montage NFS
+      shell: |
+        for i in $(seq 1 120); do
+          echo "$(date +%s) {{ inventory_hostname }} $i" >> {{ nfs_client_mounts[inventory_hostname] }}/resilience_{{ inventory_hostname }}.log
+          sync
+          sleep 0.2
+        done
+      args:
+        executable: /bin/bash
+      async: 300
+      poll: 0
+      register: nfs_transfer_job
+
+    - name: Attendre le démarrage du transfert
+      pause:
+        seconds: 3
+
+- name: "[Partie 1][Test Résilience] Simuler perte d'une interface du serveur"
+  hosts: serveur-nfs
+  become: yes
+  tags: ["bonding", "resilience"]
+  tasks:
+    - name: Désactiver temporairement une interface du bond
+      command: ip link set dev {{ bond_iface1 }} down
+
+    - name: Attendre pendant la coupure de lien
+      pause:
+        seconds: 8
+
+    - name: Réactiver l'interface coupée
+      command: ip link set dev {{ bond_iface1 }} up
+
+    - name: Vérifier l'état du bond après réactivation
+      command: cat /proc/net/bonding/{{ bond_name }}
+      register: bond_after_flap
+      changed_when: false
+
+    - name: Afficher l'état du bond après simulation de panne
+      debug:
+        var: bond_after_flap.stdout_lines
+
+- name: "[Partie 1][Test Résilience] Vérifier la fin du transfert et l'accès NFS"
+  hosts: clients
+  become: yes
+  tags: ["bonding", "resilience"]
+  tasks:
+    - name: Attendre la fin du transfert asynchrone
+      async_status:
+        jid: "{{ nfs_transfer_job.ansible_job_id }}"
+      register: nfs_transfer_result
+      until: nfs_transfer_result.finished
+      retries: 60
+      delay: 2
+
+    - name: Vérifier que le transfert n'a pas échoué
+      assert:
+        that:
+          - nfs_transfer_result.rc == 0
+        fail_msg: "Le transfert vers NFS a échoué pendant la perte d'interface."
+        success_msg: "Le transfert vers NFS est resté fonctionnel malgré la perte d'interface."
+
+    - name: Vérifier que le fichier de transfert est accessible
+      command: tail -n 3 {{ nfs_client_mounts[inventory_hostname] }}/resilience_{{ inventory_hostname }}.log
+      register: resilience_tail
+      changed_when: false
+
+    - name: Afficher les dernières lignes du fichier de transfert
+      debug:
+        var: resilience_tail.stdout_lines
