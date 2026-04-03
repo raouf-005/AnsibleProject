@@ -139,6 +139,9 @@
         metrics_sans_stp:
           cpu: "{{ cpu_switch.stdout }}"
           packets: "{{ bridge_packets.stdout }}"
+    - name: "Afficher les métriques sans STP"
+      debug:
+        msg: "CPU Switch: {{ metrics_sans_stp.cpu }}%, {{ metrics_sans_stp.packets }}"
 
 - name: "[Partie 2 - STP] TEST 1 — Récupérer résultat ping sans STP"
   hosts: machine1
@@ -163,6 +166,9 @@
       set_fact:
         test1_ping_stats: "{{ ping_sans_stp_stats.stdout }}"
         test1_cpu: "{{ cpu_machine1.stdout }}"
+    - name: "Afficher résultats TEST 1"
+      debug:
+        msg: "TEST 1 - Sans STP : {{ test1_ping_stats }}, CPU Machine1: {{ test1_cpu }}%"
 
 # ============================================================
 # ÉTAPE 3 : Activation STP + mesure de convergence
@@ -253,8 +259,9 @@
       set_fact:
         test2_ping_stats: "{{ ping_convergence_stats.stdout }}"
         test2_convergence_ms: "{{ convergence_time_ms }}"
-
-# ============================================================
+    - name: "Afficher résultats TEST 2"
+      debug:
+        msg: "TEST 2 - Convergence STP : {{ test2_ping_stats }}, Temps de convergence: {{ test2_convergence_ms }} ms"
 # ÉTAPE 4 : Vérification des rôles STP
 # ============================================================
 - name: "[Partie 2 - STP] TEST 3 — Vérification des rôles STP"
@@ -296,7 +303,26 @@
 
     - name: "Stocker résultats TEST 3"
       set_fact:
-        test3_stp_table: "{{ stp_table.stdout_lines }}"
-        test3_root_info: "{{ root_info.stdout }}"
-        test3_blocked_ports: "{{ blocked_ports.stdout }}"
+        test3_root_info: "{{ root_info.stdout_lines | default([]) }}"
+        test3_blocked_ports: "{{ blocked_ports.stdout_lines | default([]) }}"
         test3_port_details: "{{ port_info.stdout_lines | default([]) }}"
+
+    - name: "Afficher résultats TEST 3"
+      debug:
+        msg: "{{ ['╔══════════════════════════════════════════════════════╗',
+          '║              TEST 3 — Rôles STP                      ║',
+          '╚══════════════════════════════════════════════════════╝',
+          '┌─ Root Bridge ─────────────────────────────────────────'] +
+          (test3_root_info | map('regex_replace', '^(.*)$', '│  \\1') | list)
+          + ['└───────────────────────────────────────────────────────',
+          '┌─ Ports bloqués ───────────────────────────────────────'] +
+          (test3_blocked_ports if test3_blocked_ports | length > 0
+          else ['│  ✓ Aucun port bloqué (ce switch est Root Bridge)'])
+          | map('regex_replace', '^(?!│)(.*)$', '│  \\1') | list
+          + ['└───────────────────────────────────────────────────────',
+          '┌─ Détails des ports ───────────────────────────────────'] +
+          (test3_port_details | map('regex_replace', '^(.*)$', '│  \\1') | list
+          if test3_port_details | length > 0
+          else ['│  (aucun détail de port disponible)'])
+          + ['└───────────────────────────────────────────────────────']
+          }}"

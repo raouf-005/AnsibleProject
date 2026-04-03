@@ -28,16 +28,16 @@
       service:
         name: frr
         state: restarted
-    - name: Uncomment ifupdownblacklist line in netd.conf
-      replace:
-        path: /etc/netd.conf
-        regexp: "^# (ifupdownblacklist.*)"
-        replace: '\1'
+#    - name: Uncomment ifupdownblacklist line in netd.conf
+#     replace:
+#       path: /etc/netd.conf
+#       regexp: "^# (ifupdownblacklist.*)"
+#       replace: '\1'
 
-    - name: Restart netd service
-      systemd:
-        name: netd
-        state: restarted
+#   - name: Restart netd service
+#     systemd:
+#       name: netd
+#       state: restarted
 
 - name: Delete NFS exports and client configs
   hosts: all
@@ -66,7 +66,7 @@
       loop: "{{ iface_files.files }}"
 
 - name: Restart networking to apply clean state
-  hosts: machines,servers
+  hosts: clients,servers
   become: yes
   tasks:
     - name: Restart networking service
@@ -106,12 +106,3 @@
       systemd:
         name: systemd-networkd
         state: restarted
-
-- name: Ensure hostname on Cumulus switches
-  hosts: switches,T4
-  become: yes
-  gather_facts: no
-  tasks:
-    - name: Set hostname to inventory hostname
-      ansible.builtin.hostname:
-        name: "{{ inventory_hostname }}"

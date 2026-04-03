@@ -137,6 +137,14 @@
       pause:
         seconds: 8
 
+    - name: Vérifier l'état du bond avant réactivation
+      command: cat /proc/net/bonding/{{ bond_name }}
+      changed_when: false
+      register: bond_during_flap
+    - name: Afficher l'état du bond pendant la simulation de panne
+      debug:
+        var: bond_during_flap.stdout_lines
+
     - name: Réactiver l'interface coupée
       command: ip link set dev {{ bond_iface1 }} up
 

@@ -94,11 +94,6 @@
   become: yes
   roles:
     - nfs-server
-  handlers:
-    - name: restart nfs
-      systemd:
-        name: nfs-kernel-server
-        state: restarted
 
 - name: "[Partie 1] Configurer les interfaces clientes"
   hosts: machine1

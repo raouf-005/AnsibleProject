@@ -36,10 +36,10 @@
       auto {{ bond_name }}
       iface {{ bond_name }} inet manual
           bond-slaves {{ bond_iface1 }} {{ bond_iface2 }}
-          bond-mode 802.3ad
-          bond-miimon 100
-          bond-xmit-hash-policy layer3+4
-          bond-min-links 1
+          bond-mode {{ bond_mode }}
+          bond-miimon {{ bond_miimon }}
+          bond-xmit-hash-policy {{ bond_xmit_hash_policy }}
+          bond-min-links {{ bond_min_links }}
 
       auto {{ bond_name }}.10
       iface {{ bond_name }}.10 inet static

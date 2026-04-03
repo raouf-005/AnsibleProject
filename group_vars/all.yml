@@ -2,6 +2,7 @@
 nfs_version: 3
 domain: projet.local
 net_management: "192.168.198.0/24"
+nfs_export_options: "rw,sync,no_subtree_check,no_root_squash"
 
 # Cumulus / NCLU
 # Description utilisee pour tracer les commits executes par Ansible

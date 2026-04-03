@@ -16,6 +16,218 @@
   become: yes
   roles:
     - rstp
+- name: "[Partie 2 - RSTP] TEST 1 — Démarrer la mesure"
+  hosts: machine1
+  become: true
+  tasks:
+    - name: Supprimer les résultats de test précédents
+      file:
+        path: /tmp/test_convergence_rstp.txt
+        state: absent
+
+    - name: Enregistrer l'heure de début du test RSTP
+      shell: date +%s%3N
+      register: rstp_test_start
+      changed_when: false
+
+    - name: Lancer le ping continu avec timestamps
+      shell: |
+        ping -D -c 300 -i 0.1 {{ hostvars['machine2']['stp_client_ip'] }} > /tmp/test_convergence_rstp.txt 2>&1
+      async: 90
+      poll: 0
+      register: rstp_ping_job
+
+    - name: Sauvegarder le JID du ping
+      set_fact:
+        rstp_ping_jid: "{{ rstp_ping_job.ansible_job_id }}"
+        rstp_test_start_ms: "{{ rstp_test_start.stdout | int }}"
+
+# --- Étape 3 : Scénario de convergence (coupure/restauration) ---
+- name: "[Partie 2 - RSTP] TEST 1 — Injection de panne de lien"
+  hosts: switch1
+  become: true
+  tasks:
+    - name: Choisir le port a couper pour le test
+      set_fact:
+        rstp_test_port: "{{ sw1_uplink_port | default('swp2') }}"
+
+    - name: Attendre 2s avant coupure
+      pause:
+        seconds: 2
+
+    - name: Horodatage début panne
+      shell: date +%s%3N
+      register: rstp_fault_start
+      changed_when: false
+
+    - name: Couper le lien pour forcer la reconvergence
+      command: "ip link set dev {{ rstp_test_port }} down"
+
+    - name: Horodatage debut panne vu depuis machine1 (apres coupure)
+      command: date +%s%3N
+      delegate_to: machine1
+      register: rstp_fault_start_m1
+      changed_when: false
+
+    - name: Attendre 5s pour laisser RSTP reconverger
+      pause:
+        seconds: 5
+
+    - name: Restaurer le lien coupe
+      command: "ip link set dev {{ rstp_test_port }} up"
+
+    - name: Horodatage fin panne
+      shell: date +%s%3N
+      register: rstp_fault_end
+      changed_when: false
+
+    - name: Sauvegarder les marqueurs de panne
+      set_fact:
+        rstp_fault_start_ms: "{{ rstp_fault_start.stdout | int }}"
+        rstp_fault_end_ms: "{{ rstp_fault_end.stdout | int }}"
+        rstp_fault_start_m1_ms: "{{ rstp_fault_start_m1.stdout | int }}"
+
+    - name: Afficher le scénario de panne injectée
+      debug:
+        msg:
+          - "Port teste: {{ rstp_test_port }}"
+          - "Debut panne: {{ rstp_fault_start_ms }} ms"
+          - "Debut panne (horloge machine1): {{ rstp_fault_start_m1_ms }} ms"
+          - "Fin panne: {{ rstp_fault_end_ms }} ms"
+
+# --- Étape 4 : Récupérer les mesures de convergence ---
+- name: "[Partie 2 - RSTP] TEST 1 — Résultats convergence et pertes"
+  hosts: machine1
+  become: true
+  tasks:
+    - name: Attendre la fin du ping asynchrone
+      async_status:
+        jid: "{{ rstp_ping_jid }}"
+      register: rstp_ping_result
+      until: rstp_ping_result.finished
+      retries: 30
+      delay: 3
+      failed_when: false
+
+    - name: Enregistrer l'heure de fin du test RSTP
+      shell: date +%s%3N
+      register: rstp_test_end
+      changed_when: false
+
+    - name: Extraire le résumé ping
+      shell: tail -3 /tmp/test_convergence_rstp.txt
+      register: rstp_ping_stats
+      changed_when: false
+      failed_when: false
+
+    - name: Extraire le pourcentage de perte RSTP
+      shell: |
+        awk -F',' '/packet loss/ {
+          gsub(/[^0-9]/, "", $3)
+          print $3
+        }' /tmp/test_convergence_rstp.txt | tail -1
+      register: rstp_packet_loss_pct
+      changed_when: false
+      failed_when: false
+
+    - name: Extraire le nombre de paquets perdus RSTP
+      shell: |
+        awk -F',' '/packets transmitted/ {
+          tx = $1
+          rx = $2
+          gsub(/[^0-9]/, "", tx)
+          gsub(/[^0-9]/, "", rx)
+          if (tx != "" && rx != "") {
+            print tx - rx
+          }
+        }' /tmp/test_convergence_rstp.txt | tail -1
+      register: rstp_lost_packets
+      changed_when: false
+      failed_when: false
+
+    - name: Trouver le premier ping reussi apres la coupure
+      shell: |
+        awk -v down_ms="{{ hostvars['switch1']['rstp_fault_start_m1_ms'] | default('0') }}" '
+          BEGIN { down = down_ms / 1000.0 }
+          /bytes from/ {
+            ts = $1
+            gsub(/^\[/, "", ts)
+            gsub(/\]$/, "", ts)
+            if (ts != "" && ts + 0 >= down + 0) {
+              print ts
+              exit
+            }
+          }
+        ' /tmp/test_convergence_rstp.txt
+      register: rstp_first_reply_after_down
+      changed_when: false
+      failed_when: false
+
+    - name: Calculer la plus grande coupure observee dans le ping (fallback)
+      shell: |
+        awk '
+          /bytes from/ {
+            ts = $1
+            gsub(/^\[/, "", ts)
+            gsub(/\]$/, "", ts)
+            if (prev != "") {
+              d = ts - prev
+              if (d > max) {
+                max = d
+              }
+            }
+            prev = ts
+          }
+          END {
+            if (max > 0.1) {
+              print int((max - 0.1) * 1000)
+            } else {
+              print "N/A"
+            }
+          }
+        ' /tmp/test_convergence_rstp.txt
+      register: rstp_gap_based_reconvergence_ms
+      changed_when: false
+      failed_when: false
+
+    - name: Calculer la reconvergence RSTP apres coupure
+      set_fact:
+        rstp_reconvergence_ms: >-
+          {% set first_reply = rstp_first_reply_after_down.stdout | trim %}
+          {% set fault_start = hostvars['switch1']['rstp_fault_start_m1_ms'] | default(0) | int %}
+          {% set fallback_gap = rstp_gap_based_reconvergence_ms.stdout | default('N/A') | trim %}
+          {% if first_reply | length > 0 and first_reply != '' and fault_start > 0 %}
+          {{ ((first_reply | float * 1000) - fault_start) | int }}
+          {% elif fallback_gap != '' and fallback_gap != 'N/A' %}
+          {{ fallback_gap }}
+          {% else %}
+          N/A
+          {% endif %}
+        rstp_total_test_ms: "{{ rstp_test_end.stdout | int - rstp_test_start_ms | int }}"
+
+    - name: Sauvegarder le résumé des mesures RSTP
+      copy:
+        dest: /tmp/rstp_measurement_summary.txt
+        mode: "0644"
+        content: |
+          test_port={{ hostvars['switch1']['rstp_test_port'] | default('N/A') }}
+          fault_start_ms={{ hostvars['switch1']['rstp_fault_start_ms'] | default('N/A') }}
+          fault_end_ms={{ hostvars['switch1']['rstp_fault_end_ms'] | default('N/A') }}
+          reconvergence_ms={{ rstp_reconvergence_ms }}
+          packet_loss_pct={{ rstp_packet_loss_pct.stdout | default('N/A') | trim }}
+          lost_packets={{ rstp_lost_packets.stdout | default('N/A') | trim }}
+          total_test_ms={{ rstp_total_test_ms }}
+          ping_stats={{ (rstp_ping_stats.stdout | default('N/A')) | regex_replace('\n', ' | ') }}
+
+    - name: Afficher les résultats TEST 1 (RSTP)
+      debug:
+        msg:
+          - "Reconvergence RSTP apres coupure: {{ rstp_reconvergence_ms }} ms"
+          - "Perte RSTP: {{ rstp_packet_loss_pct.stdout | default('N/A') | trim }}%"
+          - "Paquets perdus RSTP: {{ rstp_lost_packets.stdout | default('N/A') | trim }}"
+          - "Statistiques ping: {{ rstp_ping_stats.stdout | default('N/A') | regex_replace('\n', ' | ') }}"
+
+# --- Étape 5 : Vérification et comparaison ---
 # --- Étape 2 : Vérification et tests ---
 - name: "[Partie 2 - RSTP] Vérification et comparaison"
   hosts: switches
@@ -25,6 +237,28 @@
       command: brctl showstp bridge
       register: rstp_table
 
-    - name: Résultat RSTP
+    - name: Extraire bridge ID et root
+      shell: |
+        brctl showstp bridge | grep -E "bridge id|designated root|root port"
+      register: bridge_summary
+      changed_when: false
+
+    - name: Extraire les ports et leurs états
+      shell: |
+        brctl showstp bridge | grep -E "^swp|state\s+(forwarding|blocking|discarding)"
+      register: ports_summary
+      changed_when: false
+
+    - name: "Afficher résultats RSTP"
       debug:
-        var: rstp_table.stdout_lines
+        msg: "{{
+          ['╔══════════════════════════════════════════════════════╗',
+          '║           Partie 2 — Table RSTP                      ║',
+          '╚══════════════════════════════════════════════════════╝',
+          '┌─ Bridge Info ─────────────────────────────────────────'] +
+          (bridge_summary.stdout_lines | map('regex_replace', '^\\s*(.*)$', '│  \\1') | list) +
+          ['└───────────────────────────────────────────────────────',
+          '┌─ État des ports ──────────────────────────────────────'] +
+          (ports_summary.stdout_lines | map('regex_replace', '^\\s*(.*)$', '│  \\1') | list) +
+          ['└───────────────────────────────────────────────────────']
+          }}"

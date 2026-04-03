@@ -11,3 +11,11 @@ bond_gateway: 192.168.1.254
 bond_mode: 802.3ad
 bond_miimon: 100
 bond_lacp_rate: fast
+# Partie 1 : NFS / VLAN
+nfs_client_vlan_ip: "192.168.10.2"
+nfs_client_mount_path: "/machine1"
+nfs_export_subnet: "{{ net_vlan10 }}"
+nfs_peer_host: "machine2"
+
+# Partie 2 : STP
+stp_client_ip: "192.168.10.2"
